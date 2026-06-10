@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getProductos } from "../services/api";
 
 function Dashboard() {
@@ -6,11 +6,7 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    loadProductos();
-  }, []);
-
-  async function loadProductos() {
+  const loadProductos = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -21,19 +17,28 @@ function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      loadProductos();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, [loadProductos]);
 
   const lowStockThreshold = 5;
-  const totalProductos = productos.length;
   const numericProducts = productos.map((producto) => ({
     ...producto,
     precio: Number(String(producto.precio).replace(",", ".")) || 0,
     stock: Number(String(producto.stock).replace(",", ".")) || 0,
   }));
 
+  const totalProductos = productos.length;
   const stockBajoCount = numericProducts.filter((producto) => producto.stock <= lowStockThreshold).length;
   const criticalStockCount = numericProducts.filter((producto) => producto.stock > 0 && producto.stock <= lowStockThreshold).length;
   const outOfStockCount = numericProducts.filter((producto) => producto.stock <= 0).length;
+  const healthyStockCount = numericProducts.filter((producto) => producto.stock > lowStockThreshold).length;
 
   const valorInventario = numericProducts.reduce(
     (sum, producto) => sum + producto.precio * producto.stock,
@@ -62,123 +67,171 @@ function Dashboard() {
       maximumFractionDigits: 2,
     }).format(value);
 
+  const metricCards = [
+    {
+      label: "Total de productos",
+      value: totalProductos,
+      helper: "Productos registrados",
+      color: "from-[#2f7fd3] to-[#082758]",
+    },
+    {
+      label: "Stock bajo",
+      value: stockBajoCount,
+      helper: `Igual o menor a ${lowStockThreshold}`,
+      color: "from-[#69b523] to-[#2f7d1f]",
+    },
+    {
+      label: "Valor inventario",
+      value: formatCurrency(valorInventario),
+      helper: "Valor total activo",
+      color: "from-[#082758] to-[#184f9c]",
+    },
+  ];
+
+  const alertCards = [
+    {
+      label: "Stock critico",
+      value: criticalStockCount,
+      helper: "Productos que necesitan reposicion pronto.",
+      tone: "border-amber-200 bg-amber-50 text-amber-800",
+    },
+    {
+      label: "Agotados",
+      value: outOfStockCount,
+      helper: "Productos sin unidades disponibles.",
+      tone: "border-rose-200 bg-rose-50 text-rose-800",
+    },
+    {
+      label: "Stock saludable",
+      value: healthyStockCount,
+      helper: "Productos por encima del umbral minimo.",
+      tone: "border-[#bfe5a4] bg-[#f1f9eb] text-[#2f7d1f]",
+    },
+  ];
+
   return (
-    <div className="p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Inicio</h1>
-        <p className="text-gray-600 mt-2">Bienvenido al panel de control. Aquí tienes un resumen rápido del inventario.</p>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        <div className="rounded-3xl bg-white p-6 shadow-lg border border-gray-200">
-          <p className="text-sm uppercase tracking-wide text-gray-500">Total de productos</p>
-          <p className="mt-4 text-4xl font-semibold text-blue-950">{loading ? "..." : totalProductos}</p>
-          <p className="mt-2 text-gray-500">Productos registrados en el sistema.</p>
-        </div>
-
-        <div className="rounded-3xl bg-white p-6 shadow-lg border border-gray-200">
-          <p className="text-sm uppercase tracking-wide text-gray-500">Stock bajo</p>
-          <p className="mt-4 text-4xl font-semibold text-blue-950">{loading ? "..." : stockBajoCount}</p>
-          <p className="mt-2 text-gray-500">Productos con stock igual o menor a {lowStockThreshold}.</p>
-        </div>
-
-        <div className="rounded-3xl bg-white p-6 shadow-lg border border-gray-200">
-          <p className="text-sm uppercase tracking-wide text-gray-500">Valor invent.</p>
-          <p className="mt-4 text-4xl font-semibold text-blue-950">{loading ? "..." : formatCurrency(valorInventario)}</p>
-          <p className="mt-2 text-gray-500">Valor total de los productos activos.</p>
-        </div>
-      </div>
-
-      <div className="mt-10">
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold">Productos de menos stock</h2>
-            <p className="text-gray-600 mt-1">Revisa los productos que están en riesgo de agotarse.</p>
+    <div className="space-y-8">
+      <section className="overflow-hidden rounded-[32px] border border-[#d8e8f7] bg-white shadow-xl shadow-[#082758]/8">
+        <div className="bg-[linear-gradient(135deg,_#082758_0%,_#2f7fd3_58%,_#69b523_100%)] p-7 text-white">
+          <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-100">Inicio</p>
+          <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h1 className="text-4xl font-bold tracking-tight">Resumen del inventario</h1>
+              <p className="mt-3 max-w-2xl text-base leading-7 text-blue-50">
+                Revisa existencias, valor total y productos que requieren atencion desde una vista mas clara y dinamica.
+              </p>
+            </div>
+            <div className="rounded-3xl border border-white/20 bg-white/15 px-5 py-4 backdrop-blur">
+              <p className="text-sm text-blue-50">Estado general</p>
+              <p className="mt-1 text-2xl font-bold">{loading ? "Cargando..." : `${healthyStockCount} productos estables`}</p>
+            </div>
           </div>
         </div>
 
-        {loading ? (
-          <p>Cargando estadísticas...</p>
-        ) : error ? (
-          <p className="text-red-600">{error}</p>
-        ) : lowStockProducts.length === 0 ? (
-          <p className="text-gray-600">No hay productos con stock bajo en este momento.</p>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {lowStockProducts.map((producto) => (
-              <div key={producto.id ?? producto.nombre} className="rounded-3xl bg-white p-5 shadow-lg border border-gray-200">
-                <p className="text-sm font-medium text-gray-500">{producto.nombre || "Producto"}</p>
-                <p className="mt-3 text-3xl font-semibold text-blue-950">{producto.stock}</p>
-                <p className="mt-2 text-gray-500">Stock disponible</p>
-                <div className="mt-4 text-sm text-gray-600">
-                  <p>Precio: {formatCurrency(producto.precio)}</p>
-                  <p className="mt-1">ID: {producto.id ?? producto.identificacion ?? "-"}</p>
-                </div>
+        <div className="grid gap-4 p-5 xl:grid-cols-3">
+          {metricCards.map((card) => (
+            <article key={card.label} className="group overflow-hidden rounded-[28px] border border-[#d8e8f7] bg-white shadow-lg shadow-[#082758]/5 transition duration-300 hover:-translate-y-1 hover:shadow-xl">
+              <div className={`h-2 bg-gradient-to-r ${card.color}`} />
+              <div className="p-6">
+                <p className="text-sm font-bold uppercase tracking-[0.18em] text-slate-500">{card.label}</p>
+                <p className="mt-4 text-4xl font-bold text-[#082758]">{loading ? "..." : card.value}</p>
+                <p className="mt-2 text-sm text-slate-500">{card.helper}</p>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            </article>
+          ))}
+        </div>
+      </section>
 
-      <div className="mt-10">
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold">Últimos productos agregados</h2>
-            <p className="text-gray-600 mt-1">Se actualiza con los productos más recientes.</p>
+      <section className="grid gap-4 lg:grid-cols-3">
+        {alertCards.map((alert) => (
+          <article key={alert.label} className={`rounded-[28px] border p-5 shadow-lg shadow-[#082758]/5 ${alert.tone}`}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-bold uppercase tracking-[0.16em] opacity-80">{alert.label}</p>
+                <p className="mt-3 text-4xl font-bold">{loading ? "..." : alert.value}</p>
+              </div>
+              <span className="mt-1 h-3 w-3 rounded-full bg-current opacity-60" />
+            </div>
+            <p className="mt-3 text-sm leading-6 opacity-80">{alert.helper}</p>
+          </article>
+        ))}
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="rounded-[32px] border border-[#d8e8f7] bg-white p-6 shadow-xl shadow-[#082758]/8">
+          <div className="mb-5">
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#69b523]">Prioridad</p>
+            <h2 className="mt-2 text-2xl font-bold text-[#082758]">Productos de menos stock</h2>
+            <p className="mt-1 text-sm text-slate-500">Revisa los productos que estan en riesgo de agotarse.</p>
           </div>
+
+          {loading ? (
+            <p className="rounded-2xl bg-[#eef6ff] p-4 text-[#082758]">Cargando estadisticas...</p>
+          ) : error ? (
+            <p className="rounded-2xl bg-rose-50 p-4 text-rose-700">{error}</p>
+          ) : lowStockProducts.length === 0 ? (
+            <p className="rounded-2xl bg-[#f1f9eb] p-4 text-[#2f7d1f]">No hay productos con stock bajo en este momento.</p>
+          ) : (
+            <div className="space-y-3">
+                {lowStockProducts.map((producto, index) => (
+                <div key={producto.id ?? producto.nombre} className="rounded-2xl border border-[#d8e8f7] bg-[#f8fbff] p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="font-semibold text-[#082758]">{producto.nombre || "Producto"}</p>
+                      <p className="mt-1 text-sm text-slate-500">ID: {index + 1}</p>
+                    </div>
+                    <div className="rounded-2xl bg-[#69b523] px-4 py-2 text-lg font-bold text-white">
+                      {producto.stock}
+                    </div>
+                  </div>
+                  <p className="mt-3 text-sm text-slate-500">Precio: {formatCurrency(producto.precio)}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {loading ? (
-          <p>Cargando productos recientes...</p>
-        ) : error ? (
-          <p className="text-red-600">{error}</p>
-        ) : latestProducts.length === 0 ? (
-          <p className="text-gray-600">No hay productos registrados aún.</p>
-        ) : (
-          <div className="overflow-x-auto rounded-3xl bg-white shadow-lg border border-gray-200">
-            <table className="min-w-full border-collapse text-left">
-              <thead className="bg-slate-100">
-                <tr>
-                  <th className="border px-4 py-3">ID</th>
-                  <th className="border px-4 py-3">Nombre</th>
-                  <th className="border px-4 py-3">Stock</th>
-                  <th className="border px-4 py-3">Precio</th>
-                  <th className="border px-4 py-3">Descripción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {latestProducts.map((producto) => (
-                  <tr key={producto.id ?? producto.nombre} className="even:bg-slate-50">
-                    <td className="border px-4 py-3">{producto.id ?? producto.identificacion ?? "-"}</td>
-                    <td className="border px-4 py-3">{producto.nombre}</td>
-                    <td className="border px-4 py-3">{producto.stock}</td>
-                    <td className="border px-4 py-3">{formatCurrency(producto.precio)}</td>
-                    <td className="border px-4 py-3">{producto.descripcion ?? "-"}</td>
+        <div className="overflow-hidden rounded-[32px] border border-[#d8e8f7] bg-white shadow-xl shadow-[#082758]/8">
+          <div className="border-b border-[#d8e8f7] p-6">
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#2f7fd3]">Actividad</p>
+            <h2 className="mt-2 text-2xl font-bold text-[#082758]">Ultimos productos agregados</h2>
+            <p className="mt-1 text-sm text-slate-500">Se actualiza con los productos mas recientes.</p>
+          </div>
+
+          {loading ? (
+            <p className="p-6 text-[#082758]">Cargando productos recientes...</p>
+          ) : error ? (
+            <p className="p-6 text-rose-700">{error}</p>
+          ) : latestProducts.length === 0 ? (
+            <p className="p-6 text-slate-500">No hay productos registrados aun.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse text-left">
+                <thead className="bg-[#eef6ff] text-[#082758]">
+                  <tr>
+                    <th className="px-4 py-3 text-sm font-bold">ID</th>
+                    <th className="px-4 py-3 text-sm font-bold">Nombre</th>
+                    <th className="px-4 py-3 text-sm font-bold">Stock</th>
+                    <th className="px-4 py-3 text-sm font-bold">Precio</th>
+                    <th className="px-4 py-3 text-sm font-bold">Descripcion</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <div className="mt-10 rounded-3xl bg-slate-950 p-6 text-white shadow-lg border border-slate-800">
-        <div className="mb-4 flex items-center gap-3">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500 text-xl">⚠️</span>
-          <h2 className="text-2xl font-semibold">Alertas</h2>
+                </thead>
+                <tbody>
+                  {latestProducts.map((producto, index) => (
+                    <tr key={producto.id ?? producto.nombre} className="border-t border-[#d8e8f7] even:bg-[#f8fbff]">
+                      <td className="px-4 py-3 text-sm">{index + 1}</td>
+                      <td className="px-4 py-3 text-sm font-semibold text-[#082758]">{producto.nombre}</td>
+                      <td className="px-4 py-3 text-sm">{producto.stock}</td>
+                      <td className="px-4 py-3 text-sm">{formatCurrency(producto.precio)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-500">{producto.descripcion ?? "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-        <div className="space-y-4">
-          <div className="rounded-2xl bg-slate-900/80 p-4 border border-slate-800">
-            <p className="text-sm text-slate-400">Hay <span className="font-semibold text-white">{loading ? "..." : criticalStockCount}</span> productos con stock crítico.</p>
-          </div>
-          <div className="rounded-2xl bg-slate-900/80 p-4 border border-slate-800">
-            <p className="text-sm text-slate-400">Existen <span className="font-semibold text-white">{loading ? "..." : outOfStockCount}</span> productos agotados.</p>
-          </div>
-          <div className="rounded-2xl bg-slate-900/80 p-4 border border-slate-800">
-            <p className="text-sm text-slate-400">Última copia de seguridad: hace 2 días.</p>
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
   );
 }

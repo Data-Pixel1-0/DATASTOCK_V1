@@ -15,8 +15,8 @@ async function ensureUsuarioSchema() {
           id INT AUTO_INCREMENT PRIMARY KEY,
           nombre VARCHAR(100) NOT NULL,
           usuario VARCHAR(50) UNIQUE NOT NULL,
-          contrasena VARCHAR(255) NOT NULL,
-          correo VARCHAR(100) UNIQUE,
+          password VARCHAR(255) NOT NULL,
+          email VARCHAR(100) UNIQUE NOT NULL,
           rol VARCHAR(30) DEFAULT 'usuario',
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -26,6 +26,44 @@ async function ensureUsuarioSchema() {
   } catch (error) {
     console.error("Error al asegurar el esquema de usuarios:", error);
     process.exit(1);
+  }
+}
+
+async function getUsuarioColumns() {
+  const [columns] = await db.query("SHOW COLUMNS FROM usuarios");
+  return new Set(columns.map((column) => column.Field));
+}
+
+function usuarioColumn(columns, modernName, legacyName) {
+  if (columns.has(modernName)) return modernName;
+  if (columns.has(legacyName)) return legacyName;
+  return modernName;
+}
+
+function usuarioValueExpression(columns, modernName, legacyName) {
+  const availableColumns = [modernName, legacyName]
+    .filter((column) => columns.has(column))
+    .map((column) => `\`${column}\``);
+
+  if (availableColumns.length === 0) return `\`${modernName}\``;
+  if (availableColumns.length === 1) return availableColumns[0];
+  return `COALESCE(${availableColumns.join(", ")})`;
+}
+
+async function resequenceProductos() {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query("SET @producto_row_number = 0");
+    await connection.query("UPDATE productos SET id = (@producto_row_number := @producto_row_number + 1) ORDER BY id");
+    const [[{ nextId }]] = await connection.query("SELECT COALESCE(MAX(id), 0) + 1 AS nextId FROM productos");
+    await connection.query(`ALTER TABLE productos AUTO_INCREMENT = ${Number(nextId) || 1}`);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
 }
 
@@ -40,7 +78,7 @@ app.get("/api/status", async (req, res) => {
 
 app.get("/api/productos", async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT * FROM productos");
+    const [rows] = await db.query("SELECT * FROM productos ORDER BY id ASC");
     res.json(rows);
   } catch (error) {
     console.error(error);
@@ -79,6 +117,7 @@ app.post("/api/productos", async (req, res) => {
       "INSERT INTO productos (nombre, descripcion, precio, stock) VALUES (?, ?, ?, ?)",
       [nombre.trim(), descripcion.trim(), precioNum, stockNum]
     );
+    await resequenceProductos();
 
     res.status(201).json({ 
       success: true, 
@@ -141,6 +180,8 @@ app.delete("/api/productos/:id", async (req, res) => {
       return res.status(404).json({ error: "Producto no encontrado." });
     }
 
+    await resequenceProductos();
+
     res.json({ success: true, message: "Producto eliminado exitosamente." });
   } catch (error) {
     console.error(error);
@@ -150,7 +191,10 @@ app.delete("/api/productos/:id", async (req, res) => {
 
 app.get("/api/usuarios", async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT id, nombre, usuario, correo AS email, rol FROM usuarios");
+    const columns = await getUsuarioColumns();
+    const emailExpression = usuarioValueExpression(columns, "email", "correo");
+    const rolExpression = columns.has("rol") ? "`rol`" : "'usuario'";
+    const [rows] = await db.query(`SELECT id, nombre, usuario, ${emailExpression} AS email, ${rolExpression} AS rol FROM usuarios`);
     res.json(rows);
   } catch (error) {
     console.error(error);
@@ -171,9 +215,21 @@ app.post("/api/login", async (req, res) => {
       return res.status(400).json({ error: "Los campos no pueden estar vacíos." });
     }
 
+    const columns = await getUsuarioColumns();
+    const emailExpression = usuarioValueExpression(columns, "email", "correo");
+    const passwordExpression = usuarioValueExpression(columns, "password", "contrasena");
+    const rolExpression = columns.has("rol") ? "`rol`" : "'usuario'";
+
     const [rows] = await db.query(
-      "SELECT id, nombre, usuario FROM usuarios WHERE correo = ? AND contrasena = ? LIMIT 1",
-      [correo, password]
+      `SELECT id, nombre, usuario, ${emailExpression} AS email, ${rolExpression} AS rol
+       FROM usuarios
+       WHERE (
+           LOWER(TRIM(${emailExpression})) = LOWER(TRIM(?))
+           OR LOWER(TRIM(usuario)) = LOWER(TRIM(?))
+         )
+         AND TRIM(${passwordExpression}) = TRIM(?)
+       LIMIT 1`,
+      [correo, correo, password]
     );
 
     if (rows.length === 0) {
@@ -213,8 +269,13 @@ app.post("/api/signup", async (req, res) => {
     }
 
     // Verificar si el usuario ya existe
+    const columns = await getUsuarioColumns();
+    const emailExpression = usuarioValueExpression(columns, "email", "correo");
+    const passwordColumn = usuarioColumn(columns, "password", "contrasena");
+    const emailColumn = usuarioColumn(columns, "email", "correo");
+
     const [existingUser] = await db.query(
-      "SELECT id FROM usuarios WHERE usuario = ? OR correo = ?",
+      `SELECT id FROM usuarios WHERE usuario = ? OR LOWER(TRIM(${emailExpression})) = LOWER(TRIM(?))`,
       [usuario, email]
     );
 
@@ -223,9 +284,19 @@ app.post("/api/signup", async (req, res) => {
     }
 
     // Crear nuevo usuario
+    const insertColumns = ["nombre", "usuario", passwordColumn, emailColumn];
+    const insertValues = [nombre.trim(), usuario.trim(), password, email.trim()];
+
+    if (columns.has("rol")) {
+      insertColumns.push("rol");
+      insertValues.push("usuario");
+    }
+
+    const placeholders = insertColumns.map(() => "?").join(", ");
+    const escapedColumns = insertColumns.map((column) => `\`${column}\``).join(", ");
     const [result] = await db.query(
-      "INSERT INTO usuarios (nombre, usuario, contrasena, correo, rol) VALUES (?, ?, ?, ?, ?)",
-      [nombre, usuario, password, email, "usuario"]
+      `INSERT INTO usuarios (${escapedColumns}) VALUES (${placeholders})`,
+      insertValues
     );
 
     res.status(201).json({ 
@@ -249,6 +320,7 @@ const port = process.env.PORT || 3000;
 
 async function startServer() {
   await ensureUsuarioSchema();
+  await resequenceProductos();
   app.listen(port, () => {
     console.log(`Servidor iniciado en puerto ${port}`);
   });
