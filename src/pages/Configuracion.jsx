@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 import { useTheme } from "../context/useTheme.js";
+import { changePassword } from "../services/api.js";
 
 const defaultPreferences = {
   defaultView: "dashboard",
@@ -38,6 +39,8 @@ function Configuracion() {
   const { isDark, toggleTheme } = useTheme();
   const [showProfile, setShowProfile] = useState(true);
   const [savedMessage, setSavedMessage] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState(null);
+  const [passwordData, setPasswordData] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [currentUser] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("datastock-user")) || null;
@@ -83,6 +86,42 @@ function Configuracion() {
   const handleSavePreferences = () => {
     localStorage.setItem("datastock-preferences", JSON.stringify(preferences));
     setSavedMessage("Preferencias guardadas correctamente.");
+  };
+
+  const handlePasswordChange = (event) => {
+    const { name, value } = event.target;
+    setPasswordData((current) => ({ ...current, [name]: value }));
+    setPasswordMessage(null);
+  };
+
+  const handlePasswordSubmit = async (event) => {
+    event.preventDefault();
+    if (!currentUser?.id) {
+      setPasswordMessage({ type: "error", text: "No se encontro el usuario de la sesion." });
+      return;
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      setPasswordMessage({ type: "error", text: "La nueva contrasena debe tener al menos 6 caracteres." });
+      return;
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPasswordMessage({ type: "error", text: "La confirmacion no coincide." });
+      return;
+    }
+
+    try {
+      await changePassword({
+        usuario_id: currentUser.id,
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
+      });
+      setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      setPasswordMessage({ type: "success", text: "Contrasena actualizada correctamente." });
+    } catch (error) {
+      setPasswordMessage({ type: "error", text: error.message });
+    }
   };
 
   const preferenceSummary = [
@@ -276,6 +315,66 @@ function Configuracion() {
           >
             Guardar preferencias
           </button>
+        </div>
+      </section>
+
+      <section className="theme-card rounded-[32px] border border-[#d8e8f7] bg-white p-6 shadow-xl shadow-[#082758]/8">
+        <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#2f7fd3]">Seguridad</p>
+            <h2 className="theme-heading mt-2 text-xl font-bold text-[#082758]">Cambio de contrasena</h2>
+            <p className="theme-muted mt-2 text-sm leading-6 text-slate-500">
+              Actualiza tu acceso con una contrasena nueva de minimo 6 caracteres.
+            </p>
+          </div>
+
+          <form onSubmit={handlePasswordSubmit} className="space-y-4">
+            {passwordMessage && (
+              <p className={`rounded-2xl border px-4 py-3 text-sm font-bold ${passwordMessage.type === "success" ? "border-[#bfe5a4] bg-[#f1f9eb] text-[#2f7d1f]" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
+                {passwordMessage.text}
+              </p>
+            )}
+            <div className="grid gap-4 md:grid-cols-3">
+              <label className="block">
+                <span className="theme-heading text-sm font-bold text-[#082758]">Actual</span>
+                <input
+                  name="currentPassword"
+                  value={passwordData.currentPassword}
+                  onChange={handlePasswordChange}
+                  type="password"
+                  className="theme-input mt-2 w-full rounded-2xl border border-[#d8e8f7] bg-white px-4 py-3 text-sm font-semibold text-[#082758] outline-none transition focus:border-[#2f7fd3] focus:ring-4 focus:ring-[#2f7fd3]/10"
+                />
+              </label>
+              <label className="block">
+                <span className="theme-heading text-sm font-bold text-[#082758]">Nueva</span>
+                <input
+                  name="newPassword"
+                  value={passwordData.newPassword}
+                  onChange={handlePasswordChange}
+                  type="password"
+                  className="theme-input mt-2 w-full rounded-2xl border border-[#d8e8f7] bg-white px-4 py-3 text-sm font-semibold text-[#082758] outline-none transition focus:border-[#2f7fd3] focus:ring-4 focus:ring-[#2f7fd3]/10"
+                />
+              </label>
+              <label className="block">
+                <span className="theme-heading text-sm font-bold text-[#082758]">Confirmar</span>
+                <input
+                  name="confirmPassword"
+                  value={passwordData.confirmPassword}
+                  onChange={handlePasswordChange}
+                  type="password"
+                  className="theme-input mt-2 w-full rounded-2xl border border-[#d8e8f7] bg-white px-4 py-3 text-sm font-semibold text-[#082758] outline-none transition focus:border-[#2f7fd3] focus:ring-4 focus:ring-[#2f7fd3]/10"
+                />
+              </label>
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                className="rounded-2xl bg-[#082758] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-[#082758]/20 transition hover:-translate-y-0.5 hover:bg-[#0b3474]"
+              >
+                Actualizar contrasena
+              </button>
+            </div>
+          </form>
         </div>
       </section>
 

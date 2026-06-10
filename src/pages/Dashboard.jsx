@@ -1,236 +1,226 @@
-import { useCallback, useEffect, useState } from "react";
-import { getProductos } from "../services/api";
+import { useEffect, useMemo, useState } from "react";
+import { getDashboard } from "../services/api.js";
+
+const currencyFormatter = new Intl.NumberFormat("es-CO", {
+  style: "currency",
+  currency: "COP",
+  maximumFractionDigits: 0,
+});
+
+function Bar({ value, max, color = "bg-[#2f7fd3]" }) {
+  const width = max > 0 ? Math.max((Number(value) / max) * 100, 6) : 0;
+  return (
+    <div className="h-3 rounded-full bg-[#eef6ff]">
+      <div className={`h-full rounded-full ${color} transition-all duration-700`} style={{ width: `${width}%` }} />
+    </div>
+  );
+}
 
 function Dashboard() {
-  const [productos, setProductos] = useState([]);
+  const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const loadProductos = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await getProductos();
-      setProductos(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setError(err.message || "No se pudieron cargar los productos.");
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    async function loadDashboard() {
+      setLoading(true);
+      setError("");
+      try {
+        setDashboard(await getDashboard());
+      } catch (err) {
+        setError(err.message || "No se pudo cargar el dashboard.");
+      } finally {
+        setLoading(false);
+      }
     }
+
+    loadDashboard();
   }, []);
 
-  useEffect(() => {
-    const timerId = window.setTimeout(() => {
-      loadProductos();
-    }, 0);
+  const stats = dashboard?.stats || {};
+  const charts = dashboard?.charts || {};
+  const alertas = dashboard?.alertas || [];
+  const movimientos = dashboard?.movimientos || [];
 
-    return () => window.clearTimeout(timerId);
-  }, [loadProductos]);
-
-  const lowStockThreshold = 5;
-  const numericProducts = productos.map((producto) => ({
-    ...producto,
-    precio: Number(String(producto.precio).replace(",", ".")) || 0,
-    stock: Number(String(producto.stock).replace(",", ".")) || 0,
-  }));
-
-  const totalProductos = productos.length;
-  const stockBajoCount = numericProducts.filter((producto) => producto.stock <= lowStockThreshold).length;
-  const criticalStockCount = numericProducts.filter((producto) => producto.stock > 0 && producto.stock <= lowStockThreshold).length;
-  const outOfStockCount = numericProducts.filter((producto) => producto.stock <= 0).length;
-  const healthyStockCount = numericProducts.filter((producto) => producto.stock > lowStockThreshold).length;
-
-  const valorInventario = numericProducts.reduce(
-    (sum, producto) => sum + producto.precio * producto.stock,
-    0
+  const maxFecha = useMemo(
+    () => Math.max(1, ...(charts.movimientosPorFecha || []).map((item) => Math.max(Number(item.entradas) || 0, Number(item.salidas) || 0))),
+    [charts.movimientosPorFecha]
   );
-
-  const lowStockProducts = [...numericProducts]
-    .filter((producto) => producto.stock > 0 && producto.stock <= lowStockThreshold)
-    .sort((a, b) => a.stock - b.stock)
-    .slice(0, 5);
-
-  const latestProducts = [...numericProducts]
-    .filter(Boolean)
-    .sort((a, b) => {
-      const aId = Number(a.id);
-      const bId = Number(b.id);
-      if (!Number.isNaN(aId) && !Number.isNaN(bId)) return bId - aId;
-      return 0;
-    })
-    .slice(0, 5);
-
-  const formatCurrency = (value) =>
-    new Intl.NumberFormat("es-ES", {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 2,
-    }).format(value);
+  const maxMovimiento = useMemo(
+    () => Math.max(1, ...(charts.mayorMovimiento || []).map((item) => Number(item.total) || 0)),
+    [charts.mayorMovimiento]
+  );
+  const maxCategoria = useMemo(
+    () => Math.max(1, ...(charts.porCategoria || []).map((item) => Number(item.stock) || Number(item.productos) || 0)),
+    [charts.porCategoria]
+  );
 
   const metricCards = [
     {
       label: "Total de productos",
-      value: totalProductos,
+      value: stats.totalProductos ?? 0,
       helper: "Productos registrados",
       color: "from-[#2f7fd3] to-[#082758]",
     },
     {
-      label: "Stock bajo",
-      value: stockBajoCount,
-      helper: `Igual o menor a ${lowStockThreshold}`,
-      color: "from-[#69b523] to-[#2f7d1f]",
-    },
-    {
-      label: "Valor inventario",
-      value: formatCurrency(valorInventario),
-      helper: "Valor total activo",
+      label: "Valor total",
+      value: currencyFormatter.format(stats.valorInventario || 0),
+      helper: "Precio por stock disponible",
       color: "from-[#082758] to-[#184f9c]",
     },
-  ];
-
-  const alertCards = [
     {
-      label: "Stock critico",
-      value: criticalStockCount,
-      helper: "Productos que necesitan reposicion pronto.",
-      tone: "border-amber-200 bg-amber-50 text-amber-800",
+      label: "Stock bajo",
+      value: stats.stockBajo ?? 0,
+      helper: "Requieren reposicion",
+      color: "from-amber-500 to-[#69b523]",
     },
     {
-      label: "Agotados",
-      value: outOfStockCount,
-      helper: "Productos sin unidades disponibles.",
-      tone: "border-rose-200 bg-rose-50 text-rose-800",
-    },
-    {
-      label: "Stock saludable",
-      value: healthyStockCount,
-      helper: "Productos por encima del umbral minimo.",
-      tone: "border-[#bfe5a4] bg-[#f1f9eb] text-[#2f7d1f]",
+      label: "Movimientos recientes",
+      value: stats.movimientosRecientes ?? 0,
+      helper: "Ultima actividad registrada",
+      color: "from-[#69b523] to-[#2f7d1f]",
     },
   ];
 
   return (
     <div className="space-y-8">
-      <section className="overflow-hidden rounded-[32px] border border-[#d8e8f7] bg-white shadow-xl shadow-[#082758]/8">
+      <section className="theme-card overflow-hidden rounded-[32px] border border-[#d8e8f7] bg-white shadow-xl shadow-[#082758]/8">
         <div className="bg-[linear-gradient(135deg,_#082758_0%,_#2f7fd3_58%,_#69b523_100%)] p-7 text-white">
-          <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-100">Inicio</p>
+          <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-100">Dashboard</p>
           <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h1 className="text-4xl font-bold tracking-tight">Resumen del inventario</h1>
+              <h1 className="text-4xl font-bold tracking-tight">Gestion profesional de inventario</h1>
               <p className="mt-3 max-w-2xl text-base leading-7 text-blue-50">
-                Revisa existencias, valor total y productos que requieren atencion desde una vista mas clara y dinamica.
+                Controla existencias, valor, movimientos y alertas criticas desde una vista centralizada.
               </p>
             </div>
             <div className="rounded-3xl border border-white/20 bg-white/15 px-5 py-4 backdrop-blur">
               <p className="text-sm text-blue-50">Estado general</p>
-              <p className="mt-1 text-2xl font-bold">{loading ? "Cargando..." : `${healthyStockCount} productos estables`}</p>
+              <p className="mt-1 text-2xl font-bold">{loading ? "Cargando..." : `${stats.agotados || 0} agotados`}</p>
             </div>
           </div>
         </div>
 
-        <div className="grid gap-4 p-5 xl:grid-cols-3">
+        {error && <p className="m-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-800">{error}</p>}
+
+        <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4">
           {metricCards.map((card) => (
-            <article key={card.label} className="group overflow-hidden rounded-[28px] border border-[#d8e8f7] bg-white shadow-lg shadow-[#082758]/5 transition duration-300 hover:-translate-y-1 hover:shadow-xl">
+            <article key={card.label} className="theme-card group overflow-hidden rounded-[28px] border border-[#d8e8f7] bg-white shadow-lg shadow-[#082758]/5 transition duration-300 hover:-translate-y-1 hover:shadow-xl">
               <div className={`h-2 bg-gradient-to-r ${card.color}`} />
               <div className="p-6">
-                <p className="text-sm font-bold uppercase tracking-[0.18em] text-slate-500">{card.label}</p>
-                <p className="mt-4 text-4xl font-bold text-[#082758]">{loading ? "..." : card.value}</p>
-                <p className="mt-2 text-sm text-slate-500">{card.helper}</p>
+                <p className="theme-muted text-sm font-bold uppercase tracking-[0.18em] text-slate-500">{card.label}</p>
+                <p className="theme-heading mt-4 text-3xl font-bold text-[#082758]">{loading ? "..." : card.value}</p>
+                <p className="theme-muted mt-2 text-sm text-slate-500">{card.helper}</p>
               </div>
             </article>
           ))}
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-3">
-        {alertCards.map((alert) => (
-          <article key={alert.label} className={`rounded-[28px] border p-5 shadow-lg shadow-[#082758]/5 ${alert.tone}`}>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-bold uppercase tracking-[0.16em] opacity-80">{alert.label}</p>
-                <p className="mt-3 text-4xl font-bold">{loading ? "..." : alert.value}</p>
-              </div>
-              <span className="mt-1 h-3 w-3 rounded-full bg-current opacity-60" />
-            </div>
-            <p className="mt-3 text-sm leading-6 opacity-80">{alert.helper}</p>
-          </article>
-        ))}
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <div className="rounded-[32px] border border-[#d8e8f7] bg-white p-6 shadow-xl shadow-[#082758]/8">
-          <div className="mb-5">
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#69b523]">Prioridad</p>
-            <h2 className="mt-2 text-2xl font-bold text-[#082758]">Productos de menos stock</h2>
-            <p className="mt-1 text-sm text-slate-500">Revisa los productos que estan en riesgo de agotarse.</p>
+      <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+        <article className="theme-card rounded-[32px] border border-[#d8e8f7] bg-white p-6 shadow-xl shadow-[#082758]/8">
+          <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#69b523]">Centro de notificaciones</p>
+          <h2 className="theme-heading mt-2 text-2xl font-bold text-[#082758]">Alertas de inventario</h2>
+          <div className="mt-5 space-y-3">
+            {loading ? (
+              <p className="rounded-2xl bg-[#eef6ff] p-4 text-[#082758]">Cargando alertas...</p>
+            ) : alertas.length === 0 ? (
+              <p className="rounded-2xl border border-[#bfe5a4] bg-[#f1f9eb] p-4 font-semibold text-[#2f7d1f]">
+                No hay alertas criticas en este momento.
+              </p>
+            ) : (
+              alertas.map((alerta) => (
+                <div
+                  key={`${alerta.tipo}-${alerta.producto_id}`}
+                  className={`rounded-2xl border p-4 ${alerta.severidad === "danger" ? "border-rose-200 bg-rose-50 text-rose-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}
+                >
+                  <p className="font-bold">{alerta.mensaje}</p>
+                  <p className="mt-1 text-sm opacity-80">Revision recomendada para compras o reposicion.</p>
+                </div>
+              ))
+            )}
           </div>
+        </article>
 
+        <article className="theme-card overflow-hidden rounded-[32px] border border-[#d8e8f7] bg-white shadow-xl shadow-[#082758]/8">
+          <div className="border-b border-[#d8e8f7] p-6">
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#2f7fd3]">Actividad</p>
+            <h2 className="theme-heading mt-2 text-2xl font-bold text-[#082758]">Movimientos recientes</h2>
+          </div>
           {loading ? (
-            <p className="rounded-2xl bg-[#eef6ff] p-4 text-[#082758]">Cargando estadisticas...</p>
-          ) : error ? (
-            <p className="rounded-2xl bg-rose-50 p-4 text-rose-700">{error}</p>
-          ) : lowStockProducts.length === 0 ? (
-            <p className="rounded-2xl bg-[#f1f9eb] p-4 text-[#2f7d1f]">No hay productos con stock bajo en este momento.</p>
+            <p className="p-6 text-[#082758]">Cargando movimientos...</p>
+          ) : movimientos.length === 0 ? (
+            <p className="p-6 text-slate-500">No hay movimientos registrados.</p>
           ) : (
-            <div className="space-y-3">
-                {lowStockProducts.map((producto, index) => (
-                <div key={producto.id ?? producto.nombre} className="rounded-2xl border border-[#d8e8f7] bg-[#f8fbff] p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="font-semibold text-[#082758]">{producto.nombre || "Producto"}</p>
-                      <p className="mt-1 text-sm text-slate-500">ID: {index + 1}</p>
-                    </div>
-                    <div className="rounded-2xl bg-[#69b523] px-4 py-2 text-lg font-bold text-white">
-                      {producto.stock}
-                    </div>
+            <div className="divide-y divide-[#d8e8f7]">
+              {movimientos.slice(0, 6).map((movimiento) => (
+                <div key={movimiento.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="theme-heading font-bold text-[#082758]">{movimiento.producto}</p>
+                    <p className="theme-muted text-sm text-slate-500">{new Date(movimiento.fecha).toLocaleString()} por {movimiento.usuario_nombre || "Sistema"}</p>
                   </div>
-                  <p className="mt-3 text-sm text-slate-500">Precio: {formatCurrency(producto.precio)}</p>
+                  <span className={`w-fit rounded-full px-3 py-1 text-sm font-bold capitalize ${movimiento.tipo === "entrada" ? "bg-[#f1f9eb] text-[#2f7d1f]" : "bg-amber-50 text-amber-800"}`}>
+                    {movimiento.tipo} {movimiento.cantidad}
+                  </span>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </article>
+      </section>
 
-        <div className="overflow-hidden rounded-[32px] border border-[#d8e8f7] bg-white shadow-xl shadow-[#082758]/8">
-          <div className="border-b border-[#d8e8f7] p-6">
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#2f7fd3]">Actividad</p>
-            <h2 className="mt-2 text-2xl font-bold text-[#082758]">Ultimos productos agregados</h2>
-            <p className="mt-1 text-sm text-slate-500">Se actualiza con los productos mas recientes.</p>
+      <section className="grid gap-6 xl:grid-cols-3">
+        <article className="theme-card rounded-[32px] border border-[#d8e8f7] bg-white p-6 shadow-xl shadow-[#082758]/8">
+          <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#69b523]">Flujo</p>
+          <h2 className="theme-heading mt-2 text-xl font-bold text-[#082758]">Entradas y salidas por fecha</h2>
+          <div className="mt-5 space-y-4">
+            {(charts.movimientosPorFecha || []).map((item) => (
+              <div key={item.fecha} className="space-y-2">
+                <div className="flex justify-between text-sm font-semibold text-[#082758]">
+                  <span>{new Date(item.fecha).toLocaleDateString()}</span>
+                  <span>{Number(item.entradas) || 0} / {Number(item.salidas) || 0}</span>
+                </div>
+                <Bar value={item.entradas} max={maxFecha} color="bg-[#69b523]" />
+                <Bar value={item.salidas} max={maxFecha} color="bg-[#2f7fd3]" />
+              </div>
+            ))}
+            {!loading && (charts.movimientosPorFecha || []).length === 0 && <p className="text-sm text-slate-500">Sin datos para graficar.</p>}
           </div>
+        </article>
 
-          {loading ? (
-            <p className="p-6 text-[#082758]">Cargando productos recientes...</p>
-          ) : error ? (
-            <p className="p-6 text-rose-700">{error}</p>
-          ) : latestProducts.length === 0 ? (
-            <p className="p-6 text-slate-500">No hay productos registrados aun.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse text-left">
-                <thead className="bg-[#eef6ff] text-[#082758]">
-                  <tr>
-                    <th className="px-4 py-3 text-sm font-bold">ID</th>
-                    <th className="px-4 py-3 text-sm font-bold">Nombre</th>
-                    <th className="px-4 py-3 text-sm font-bold">Stock</th>
-                    <th className="px-4 py-3 text-sm font-bold">Precio</th>
-                    <th className="px-4 py-3 text-sm font-bold">Descripcion</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {latestProducts.map((producto, index) => (
-                    <tr key={producto.id ?? producto.nombre} className="border-t border-[#d8e8f7] even:bg-[#f8fbff]">
-                      <td className="px-4 py-3 text-sm">{index + 1}</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-[#082758]">{producto.nombre}</td>
-                      <td className="px-4 py-3 text-sm">{producto.stock}</td>
-                      <td className="px-4 py-3 text-sm">{formatCurrency(producto.precio)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-500">{producto.descripcion ?? "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <article className="theme-card rounded-[32px] border border-[#d8e8f7] bg-white p-6 shadow-xl shadow-[#082758]/8">
+          <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#2f7fd3]">Rotacion</p>
+          <h2 className="theme-heading mt-2 text-xl font-bold text-[#082758]">Productos con mayor movimiento</h2>
+          <div className="mt-5 space-y-4">
+            {(charts.mayorMovimiento || []).map((item) => (
+              <div key={item.nombre} className="space-y-2">
+                <div className="flex justify-between text-sm font-semibold text-[#082758]">
+                  <span className="truncate pr-3">{item.nombre}</span>
+                  <span>{Number(item.total) || 0}</span>
+                </div>
+                <Bar value={item.total} max={maxMovimiento} />
+              </div>
+            ))}
+            {!loading && (charts.mayorMovimiento || []).length === 0 && <p className="text-sm text-slate-500">Sin movimientos acumulados.</p>}
+          </div>
+        </article>
+
+        <article className="theme-card rounded-[32px] border border-[#d8e8f7] bg-white p-6 shadow-xl shadow-[#082758]/8">
+          <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#69b523]">Categorias</p>
+          <h2 className="theme-heading mt-2 text-xl font-bold text-[#082758]">Inventario por categorias</h2>
+          <div className="mt-5 space-y-4">
+            {(charts.porCategoria || []).map((item) => (
+              <div key={item.categoria} className="space-y-2">
+                <div className="flex justify-between text-sm font-semibold text-[#082758]">
+                  <span>{item.categoria}</span>
+                  <span>{Number(item.stock) || 0} uds</span>
+                </div>
+                <Bar value={Number(item.stock) || Number(item.productos) || 0} max={maxCategoria} color="bg-[#082758]" />
+              </div>
+            ))}
+            {!loading && (charts.porCategoria || []).length === 0 && <p className="text-sm text-slate-500">Sin categorias registradas.</p>}
+          </div>
+        </article>
       </section>
     </div>
   );

@@ -1,15 +1,21 @@
 import { NavLink } from "react-router-dom";
 import logo from "../assets/logo.png";
+import { useSessionUser } from "../hooks/useSessionUser.js";
+import { canAccess } from "../utils/auth.js";
 
 const menuItems = [
-  { label: "Inicio", to: "/inicio" },
-  { label: "Productos", to: "/productos" },
-  { label: "Usuarios", to: "/usuarios" },
-  { label: "Reportes", to: "/reportes" },
-  { label: "Configuracion", to: "/configuracion" },
+  { label: "Inicio", to: "/inicio", permission: "dashboard" },
+  { label: "Productos", to: "/productos", permission: "productos" },
+  { label: "Movimientos", to: "/movimientos", permission: "movimientos" },
+  { label: "Usuarios", to: "/usuarios", permission: "usuarios" },
+  { label: "Reportes", to: "/reportes", permission: "reportes" },
+  { label: "Configuracion", to: "/configuracion", permission: "configuracion" },
 ];
 
 function Sidebar() {
+  const user = useSessionUser();
+  const visibleItems = menuItems.filter((item) => canAccess(item.permission, user));
+
   return (
     <aside className="sticky top-0 hidden h-screen w-72 shrink-0 overflow-hidden bg-[#082758] px-5 py-6 text-white shadow-2xl shadow-[#082758]/25 lg:block">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(47,127,211,0.42),_transparent_36%),radial-gradient(circle_at_bottom_right,_rgba(105,181,35,0.35),_transparent_30%)]" />
@@ -24,7 +30,7 @@ function Sidebar() {
       </div>
 
       <nav className="relative space-y-2">
-        {menuItems.map((item) => (
+        {visibleItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

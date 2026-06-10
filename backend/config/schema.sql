@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
   usuario VARCHAR(50) UNIQUE NOT NULL,
   password VARCHAR(255) NOT NULL,
   email VARCHAR(100) UNIQUE NOT NULL,
+  rol VARCHAR(30) DEFAULT 'empleado',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -20,8 +21,26 @@ CREATE TABLE IF NOT EXISTS productos (
   descripcion TEXT NOT NULL,
   precio DECIMAL(10, 2) NOT NULL,
   stock INT NOT NULL DEFAULT 0,
+  codigo VARCHAR(80) NULL,
+  categoria VARCHAR(100) DEFAULT 'General',
+  imagen TEXT NULL,
+  stock_minimo INT NOT NULL DEFAULT 5,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Tabla de movimientos
+CREATE TABLE IF NOT EXISTS movimientos (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  producto_id INT NOT NULL,
+  tipo ENUM('entrada', 'salida') NOT NULL,
+  cantidad INT NOT NULL,
+  fecha DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  usuario_id INT NULL,
+  usuario_nombre VARCHAR(100) NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 -- Tabla de reportes (opcional)

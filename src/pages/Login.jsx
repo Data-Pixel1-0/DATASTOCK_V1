@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 import { loginUsuario, signupUsuario } from "../services/api.js";
+import { saveCurrentUser } from "../utils/auth.js";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -48,7 +49,7 @@ export default function Login() {
     try {
       const response = await loginUsuario(loginData.email.trim(), loginData.password);
       if (response?.user) {
-        localStorage.setItem("datastock-user", JSON.stringify(response.user));
+        saveCurrentUser(response.user);
       }
       navigate("/inicio");
     } catch (error) {
