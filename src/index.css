@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+.theme-shell {
+  background:
+    radial-gradient(circle at top left, rgba(47, 127, 211, 0.18), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(105, 181, 35, 0.2), transparent 30%),
+    #eef6ff;
+  color: #082758;
+}
+
+:root[data-theme="dark"] .theme-shell {
+  background:
+    radial-gradient(circle at top left, rgba(47, 127, 211, 0.22), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(105, 181, 35, 0.2), transparent 30%),
+    #061a36;
+  color: #f8fbff;
+}
+
+:root[data-theme="dark"] .theme-page {
+  background:
+    radial-gradient(circle at top right, rgba(105, 181, 35, 0.18), transparent 28%),
+    linear-gradient(180deg, #071f42 0%, #061a36 54%, #092714 100%) !important;
+}
+
+:root[data-theme="dark"] .theme-card {
+  background: rgba(9, 31, 66, 0.94) !important;
+  border-color: rgba(120, 169, 222, 0.28) !important;
+  color: #f8fbff !important;
+}
+
+:root[data-theme="dark"] .theme-soft {
+  background: rgba(12, 41, 84, 0.78) !important;
+  border-color: rgba(120, 169, 222, 0.24) !important;
+}
+
+:root[data-theme="dark"] .theme-heading,
+:root[data-theme="dark"] .theme-card h1,
+:root[data-theme="dark"] .theme-card h2,
+:root[data-theme="dark"] .theme-card h3,
+:root[data-theme="dark"] .theme-card label,
+:root[data-theme="dark"] .theme-card th {
+  color: #f8fbff !important;
+}
+
+:root[data-theme="dark"] .theme-muted,
+:root[data-theme="dark"] .theme-card p,
+:root[data-theme="dark"] .theme-card td {
+  color: #c9d8ec !important;
+}
+
+:root[data-theme="dark"] .theme-input {
+  background: #082758 !important;
+  border-color: rgba(120, 169, 222, 0.35) !important;
+  color: #f8fbff !important;
+}
+
+:root[data-theme="dark"] .theme-input::placeholder {
+  color: #94abc8;
+}
+
+:root[data-theme="dark"] .theme-table-head {
+  background: rgba(47, 127, 211, 0.22) !important;
+  color: #f8fbff !important;
+}
+
+:root[data-theme="dark"] .theme-row {
+  border-color: rgba(120, 169, 222, 0.2) !important;
+}
+
+:root[data-theme="dark"] .theme-row:nth-child(even) {
+  background: rgba(47, 127, 211, 0.1) !important;
+}
+
+:root[data-theme="dark"] .theme-page [class*="bg-white"],
+:root[data-theme="dark"] .theme-shell [class*="bg-white"] {
+  background-color: rgba(9, 31, 66, 0.94) !important;
+}
+
+:root[data-theme="dark"] .theme-page [class*="bg-[#f8fbff]"],
+:root[data-theme="dark"] .theme-page [class*="bg-[#eef6ff]"],
+:root[data-theme="dark"] .theme-shell [class*="bg-[#f8fbff]"],
+:root[data-theme="dark"] .theme-shell [class*="bg-[#eef6ff]"] {
+  background-color: rgba(12, 41, 84, 0.78) !important;
+}
+
+:root[data-theme="dark"] .theme-page [class*="text-[#082758]"],
+:root[data-theme="dark"] .theme-shell [class*="text-[#082758]"] {
+  color: #f8fbff !important;
+}
+
+:root[data-theme="dark"] .theme-page [class*="text-slate-500"],
+:root[data-theme="dark"] .theme-page [class*="text-slate-600"],
+:root[data-theme="dark"] .theme-shell [class*="text-slate-500"],
+:root[data-theme="dark"] .theme-shell [class*="text-slate-600"] {
+  color: #c9d8ec !important;
+}
+
+:root[data-theme="dark"] .theme-page [class*="border-[#d8e8f7]"],
+:root[data-theme="dark"] .theme-shell [class*="border-[#d8e8f7]"] {
+  border-color: rgba(120, 169, 222, 0.28) !important;
+}
+
+:root[data-theme="dark"] .theme-page table thead,
+:root[data-theme="dark"] .theme-shell table thead {
+  background-color: rgba(47, 127, 211, 0.22) !important;
+}
