@@ -19,6 +19,41 @@ const statusStyles = {
   Agotado: "bg-rose-50 text-rose-800",
 };
 
+function normalizeImageUrl(value) {
+  const url = String(value || "").trim();
+  if (!url) return "";
+  if (/^(https?:|data:image\/|blob:)/i.test(url)) return url;
+  if (url.startsWith("//")) return `https:${url}`;
+  return `https://${url}`;
+}
+
+function ProductImage({ src, alt, fallback }) {
+  const [hasError, setHasError] = useState(false);
+  const imageSrc = normalizeImageUrl(src);
+
+  useEffect(() => {
+    setHasError(false);
+  }, [imageSrc]);
+
+  if (!imageSrc || hasError) {
+    return (
+      <div className="flex h-48 items-center justify-center px-4 text-center text-sm font-semibold text-[#082758]">
+        {fallback}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={imageSrc}
+      alt={alt}
+      className="h-48 w-full object-contain"
+      referrerPolicy="no-referrer"
+      onError={() => setHasError(true)}
+    />
+  );
+}
+
 function Productos() {
   const user = getCurrentUser();
   const canManage = canAccess("manage-products", user);
@@ -55,6 +90,8 @@ function Productos() {
     [productos]
   );
 
+  const formImagePreview = useMemo(() => normalizeImageUrl(formData.imagen), [formData.imagen]);
+
   const openCreateForm = () => {
     if (!canManage) {
       setMessage({ type: "error", text: "Tu rol no permite crear productos." });
@@ -83,7 +120,7 @@ function Productos() {
       stock: producto.stock?.toString() || "",
       codigo: producto.codigo || "",
       categoria: producto.categoria || "General",
-      imagen: producto.imagen || "",
+      imagen: normalizeImageUrl(producto.imagen),
       stock_minimo: producto.stock_minimo?.toString() || "5",
     });
     setMessage(null);
@@ -133,11 +170,16 @@ function Productos() {
     }
 
     try {
+      const payload = {
+        ...formData,
+        imagen: normalizeImageUrl(formData.imagen),
+      };
+
       if (formMode === "create") {
-        await createProducto(formData);
+        await createProducto(payload);
         setMessage({ type: "success", text: "Producto creado correctamente." });
       } else if (currentProducto) {
-        await updateProducto(currentProducto.id, formData);
+        await updateProducto(currentProducto.id, payload);
         setMessage({ type: "success", text: "Producto actualizado correctamente." });
       }
       setFormOpen(false);
@@ -233,6 +275,12 @@ function Productos() {
               <input name="imagen" value={formData.imagen} onChange={handleChange} placeholder="https://..." className="theme-input mt-1 block w-full rounded-2xl border border-[#d8e8f7] px-4 py-3 outline-none focus:border-[#2f7fd3] focus:ring-4 focus:ring-[#2f7fd3]/10" />
             </label>
 
+            {formImagePreview && (
+              <div className="overflow-hidden rounded-[24px] border border-[#d8e8f7] bg-[#eef6ff]">
+                <ProductImage src={formImagePreview} alt="Vista previa del producto" fallback="No se pudo cargar la vista previa de esta URL." />
+              </div>
+            )}
+
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
               <button type="button" onClick={() => setFormOpen(false)} className="rounded-2xl border border-[#d8e8f7] px-5 py-3 font-semibold text-[#082758] transition hover:bg-[#eef6ff]">
                 Cancelar
@@ -306,7 +354,7 @@ function Productos() {
             <div className="mt-5 space-y-5">
               <div className="overflow-hidden rounded-[24px] border border-[#d8e8f7] bg-[#eef6ff]">
                 {selectedDetail.producto.imagen ? (
-                  <img src={selectedDetail.producto.imagen} alt={selectedDetail.producto.nombre} className="h-48 w-full object-cover" />
+                  <ProductImage src={selectedDetail.producto.imagen} alt={selectedDetail.producto.nombre} fallback="Imagen no disponible. Revisa que la URL sea directa y publica." />
                 ) : (
                   <div className="flex h-48 items-center justify-center text-4xl font-bold text-[#082758]">
                     {selectedDetail.producto.nombre?.slice(0, 2).toUpperCase()}
