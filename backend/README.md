@@ -42,9 +42,6 @@ El servidor estará en: http://localhost:3000
 
 - **POST** `/api/login` - Iniciar sesión
   - Body: `{ usuario, password }`
-  
-- **POST** `/api/signup` - Registrar nuevo usuario
-  - Body: `{ nombre, usuario, password, email }`
 
 ### Productos
 
