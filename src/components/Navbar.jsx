@@ -6,7 +6,6 @@ const mobileLinks = [
   { label: "Inicio", to: "/inicio", permission: "dashboard" },
   { label: "Productos", to: "/productos", permission: "productos" },
   { label: "Movimientos", to: "/movimientos", permission: "movimientos" },
-  { label: "Usuarios", to: "/usuarios", permission: "usuarios" },
   { label: "Reportes", to: "/reportes", permission: "reportes" },
 ];
 

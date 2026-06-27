@@ -2,11 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { createMovimiento, getMovimientos, getProductos } from "../services/api.js";
 import { canAccess, getCurrentUser } from "../utils/auth.js";
 
+function getCurrentDateTimeValue() {
+  const now = new Date();
+  const timezoneOffset = now.getTimezoneOffset() * 60000;
+  return new Date(now.getTime() - timezoneOffset).toISOString().slice(0, 16);
+}
+
 const emptyForm = {
   producto_id: "",
   tipo: "entrada",
   cantidad: "",
-  fecha: new Date().toISOString().slice(0, 16),
+  fecha: getCurrentDateTimeValue(),
 };
 
 function Movimientos() {
@@ -52,6 +58,17 @@ function Movimientos() {
     return () => window.clearTimeout(timerId);
   }, []);
 
+  useEffect(() => {
+    const updateCurrentDateTime = () => {
+      setFormData((current) => ({ ...current, fecha: getCurrentDateTimeValue() }));
+    };
+
+    updateCurrentDateTime();
+    const timerId = window.setInterval(updateCurrentDateTime, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, []);
+
   const selectedProduct = useMemo(
     () => productos.find((producto) => String(producto.id) === String(formData.producto_id)),
     [formData.producto_id, productos]
@@ -84,7 +101,7 @@ function Movimientos() {
         usuario_nombre: user?.nombre || user?.usuario || "Usuario",
       });
       setMessage({ type: "success", text: "Movimiento registrado y stock actualizado." });
-      setFormData({ ...emptyForm, fecha: new Date().toISOString().slice(0, 16) });
+      setFormData({ ...emptyForm, fecha: getCurrentDateTimeValue() });
       await loadData();
     } catch (error) {
       setMessage({ type: "error", text: error.message });
@@ -179,7 +196,7 @@ function Movimientos() {
               <input
                 name="fecha"
                 value={formData.fecha}
-                onChange={handleChange}
+                readOnly
                 disabled={!canCreate}
                 type="datetime-local"
                 className="theme-input mt-2 w-full rounded-2xl border border-[#d8e8f7] bg-white px-4 py-3 text-sm font-semibold text-[#082758] outline-none focus:border-[#2f7fd3] focus:ring-4 focus:ring-[#2f7fd3]/10 disabled:opacity-60"
