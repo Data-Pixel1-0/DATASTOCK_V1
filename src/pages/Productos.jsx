@@ -469,17 +469,6 @@ function Productos() {
                 <h3 className="theme-heading text-xl font-bold text-[#082758]">{selectedDetail.producto.nombre}</h3>
                 <p className="theme-muted mt-2 text-sm leading-6 text-slate-500">{selectedDetail.producto.descripcion}</p>
               </div>
-              <div className="rounded-2xl border border-[#d8e8f7] bg-[#f8fbff] p-4">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#2f7fd3]">Codigo QR</p>
-                    <p className="theme-muted mt-2 text-sm leading-6 text-slate-500">
-                      Escanea este codigo para identificar el producto por su codigo interno.
-                    </p>
-                  </div>
-                  <ProductQr producto={selectedDetail.producto} size={240} qrWidth={720} showActions />
-                </div>
-              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 {[
                   ["Codigo", selectedDetail.producto.codigo || "-"],

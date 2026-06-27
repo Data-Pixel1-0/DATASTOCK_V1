@@ -121,12 +121,34 @@ async function resequenceProductos() {
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
-    await connection.query("SET @producto_row_number = 0");
-    await connection.query("UPDATE productos SET id = (@producto_row_number := @producto_row_number + 1) ORDER BY id");
-    const [[{ nextId }]] = await connection.query("SELECT COALESCE(MAX(id), 0) + 1 AS nextId FROM productos");
-    await connection.query(`ALTER TABLE productos AUTO_INCREMENT = ${Number(nextId) || 1}`);
+    const [productos] = await connection.query("SELECT id FROM productos ORDER BY id ASC FOR UPDATE");
+    const mappings = productos
+      .map((producto, index) => ({ oldId: Number(producto.id), newId: index + 1 }))
+      .filter((mapping) => mapping.oldId !== mapping.newId);
+
+    if (mappings.length > 0) {
+      const maxId = Math.max(...productos.map((producto) => Number(producto.id) || 0));
+      const tempOffset = maxId + productos.length + 1000;
+
+      await connection.query("SET FOREIGN_KEY_CHECKS = 0");
+      for (const { oldId } of mappings) {
+        const tempId = oldId + tempOffset;
+        await connection.query("UPDATE productos SET id = ? WHERE id = ?", [tempId, oldId]);
+        await connection.query("UPDATE movimientos SET producto_id = ? WHERE producto_id = ?", [tempId, oldId]);
+      }
+      for (const { oldId, newId } of mappings) {
+        const tempId = oldId + tempOffset;
+        await connection.query("UPDATE productos SET id = ? WHERE id = ?", [newId, tempId]);
+        await connection.query("UPDATE movimientos SET producto_id = ? WHERE producto_id = ?", [newId, tempId]);
+      }
+      await connection.query("SET FOREIGN_KEY_CHECKS = 1");
+    }
+
+    const nextId = productos.length + 1;
+    await connection.query(`ALTER TABLE productos AUTO_INCREMENT = ${nextId}`);
     await connection.commit();
   } catch (error) {
+    await connection.query("SET FOREIGN_KEY_CHECKS = 1");
     await connection.rollback();
     throw error;
   } finally {
