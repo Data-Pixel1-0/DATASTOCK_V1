@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import QRCode from "qrcode";
 import { createProducto, deleteProducto, getProductoDetalle, getProductos, updateProducto } from "../services/api.js";
 import { canAccess, getCurrentUser } from "../utils/auth.js";
 
@@ -28,12 +29,9 @@ function normalizeImageUrl(value) {
 }
 
 function ProductImage({ src, alt, fallback }) {
-  const [hasError, setHasError] = useState(false);
+  const [failedSrc, setFailedSrc] = useState("");
   const imageSrc = normalizeImageUrl(src);
-
-  useEffect(() => {
-    setHasError(false);
-  }, [imageSrc]);
+  const hasError = failedSrc === imageSrc;
 
   if (!imageSrc || hasError) {
     return (
@@ -49,8 +47,84 @@ function ProductImage({ src, alt, fallback }) {
       alt={alt}
       className="h-48 w-full object-contain"
       referrerPolicy="no-referrer"
-      onError={() => setHasError(true)}
+      onError={() => setFailedSrc(imageSrc)}
     />
+  );
+}
+
+function getProductQrValue(producto) {
+  return String(producto.codigo || `DATASTOCK-${producto.id}`).trim();
+}
+
+function ProductQr({ producto, size = 120, qrWidth = size, showActions = false }) {
+  const [qrUrl, setQrUrl] = useState("");
+  const qrValue = useMemo(() => getProductQrValue(producto), [producto]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    QRCode.toDataURL(qrValue, {
+      errorCorrectionLevel: "Q",
+      margin: 4,
+      width: qrWidth,
+      color: {
+        dark: "#000000",
+        light: "#ffffff",
+      },
+    })
+      .then((url) => {
+        if (isMounted) setQrUrl(url);
+      })
+      .catch(() => {
+        if (isMounted) setQrUrl("");
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [qrValue, qrWidth]);
+
+  const downloadQr = () => {
+    if (!qrUrl) return;
+
+    const link = document.createElement("a");
+    link.href = qrUrl;
+    link.download = `qr-producto-${producto.codigo || producto.id}.png`;
+    link.click();
+  };
+
+  if (!qrUrl) {
+    return (
+      <div
+        className="flex items-center justify-center rounded-xl border border-[#d8e8f7] bg-white text-xs font-bold text-slate-400"
+        style={{ width: size, height: size }}
+      >
+        QR
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <img
+        src={qrUrl}
+        alt={`Codigo QR de ${producto.nombre}`}
+        className="rounded-xl border border-[#d8e8f7] bg-white p-3"
+        style={{ width: size, height: size }}
+      />
+      {showActions && (
+        <>
+          <p className="max-w-48 break-all text-center text-xs font-semibold text-slate-500">{qrValue}</p>
+          <button
+            type="button"
+            onClick={downloadQr}
+            className="rounded-xl border border-[#d8e8f7] px-4 py-2 text-sm font-semibold text-[#082758] transition hover:bg-[#eef6ff]"
+          >
+            Descargar QR
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -66,6 +140,7 @@ function Productos() {
   const [formMode, setFormMode] = useState("create");
   const [currentProducto, setCurrentProducto] = useState(null);
   const [selectedDetail, setSelectedDetail] = useState(null);
+  const [qrProducto, setQrProducto] = useState(null);
   const [formData, setFormData] = useState(emptyForm);
 
   useEffect(() => {
@@ -293,6 +368,25 @@ function Productos() {
         </section>
       )}
 
+      {qrProducto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#082758]/70 p-4">
+          <div className="w-full max-w-sm rounded-[28px] bg-white p-6 text-center shadow-2xl">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#2f7fd3]">Codigo QR</p>
+            <h3 className="theme-heading mt-2 text-xl font-bold text-[#082758]">{qrProducto.nombre}</h3>
+            <div className="mt-5 flex justify-center">
+              <ProductQr producto={qrProducto} size={280} qrWidth={720} showActions />
+            </div>
+            <button
+              type="button"
+              onClick={() => setQrProducto(null)}
+              className="mt-5 w-full rounded-2xl bg-[#082758] px-5 py-3 font-semibold text-white transition hover:bg-[#0b3474]"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
       <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <div className="theme-card overflow-hidden rounded-[32px] border border-[#d8e8f7] bg-white shadow-xl shadow-[#082758]/8">
           {loading ? (
@@ -306,7 +400,7 @@ function Productos() {
               <table className="min-w-full border-collapse text-left">
                 <thead className="bg-[#eef6ff] text-[#082758]">
                   <tr>
-                    {["Producto", "Codigo", "Categoria", "Precio", "Stock", "Estado", "Acciones"].map((column) => (
+                    {["Producto", "Codigo", "QR", "Categoria", "Precio", "Stock", "Estado", "Acciones"].map((column) => (
                       <th key={column} className="border-b border-[#d8e8f7] px-4 py-3 text-sm font-bold">{column}</th>
                     ))}
                   </tr>
@@ -316,6 +410,16 @@ function Productos() {
                     <tr key={producto.id} className="border-b border-[#d8e8f7] even:bg-[#f8fbff]">
                       <td className="px-4 py-3 font-semibold text-[#082758]">{producto.nombre}</td>
                       <td className="px-4 py-3 text-sm text-slate-500">{producto.codigo || "-"}</td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => setQrProducto(producto)}
+                          className="rounded-xl border border-[#d8e8f7] bg-white p-2 transition hover:bg-[#eef6ff]"
+                          aria-label={`Ver codigo QR de ${producto.nombre}`}
+                        >
+                          <ProductQr producto={producto} size={86} qrWidth={360} />
+                        </button>
+                      </td>
                       <td className="px-4 py-3 text-sm">{producto.categoria || "General"}</td>
                       <td className="px-4 py-3 text-sm">{producto.precio}</td>
                       <td className="px-4 py-3 text-sm">{producto.stock}</td>
@@ -364,6 +468,17 @@ function Productos() {
               <div>
                 <h3 className="theme-heading text-xl font-bold text-[#082758]">{selectedDetail.producto.nombre}</h3>
                 <p className="theme-muted mt-2 text-sm leading-6 text-slate-500">{selectedDetail.producto.descripcion}</p>
+              </div>
+              <div className="rounded-2xl border border-[#d8e8f7] bg-[#f8fbff] p-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#2f7fd3]">Codigo QR</p>
+                    <p className="theme-muted mt-2 text-sm leading-6 text-slate-500">
+                      Escanea este codigo para identificar el producto por su codigo interno.
+                    </p>
+                  </div>
+                  <ProductQr producto={selectedDetail.producto} size={240} qrWidth={720} showActions />
+                </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 {[

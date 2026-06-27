@@ -93,10 +93,3 @@ export async function loginUsuario(email, password) {
     body: JSON.stringify({ correo: email, password }),
   });
 }
-
-export async function signupUsuario(nombre, usuario, password, email) {
-  return request("/api/signup", {
-    method: "POST",
-    body: JSON.stringify({ nombre, usuario, password, email }),
-  });
-}
