@@ -1,20 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
-import { loginUsuario, signupUsuario } from "../services/api.js";
+import { loginUsuario } from "../services/api.js";
 import { saveCurrentUser } from "../utils/auth.js";
 
 export default function Login() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState("login");
   const [loginData, setLoginData] = useState({ email: "", password: "" });
-  const [registerData, setRegisterData] = useState({ nombre: "", usuario: "", password: "", email: "" });
   const [errors, setErrors] = useState({});
   const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const isLogin = mode === "login";
 
   const validateFields = (data, requiredFields) => {
     const nextErrors = {};
@@ -24,16 +19,6 @@ export default function Login() {
         nextErrors[field] = "Campo obligatorio";
       }
     });
-
-    if (mode === "register") {
-      if (data.email && !emailRegex.test(data.email)) {
-        nextErrors.email = "Email invalido";
-      }
-
-      if (data.password && data.password.length < 6) {
-        nextErrors.password = "La contrasena debe tener al menos 6 caracteres";
-      }
-    }
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -59,44 +44,9 @@ export default function Login() {
     }
   };
 
-  const handleRegister = async () => {
-    setMessage(null);
-    if (!validateFields(registerData, ["nombre", "usuario", "password", "email"])) {
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await signupUsuario(
-        registerData.nombre.trim(),
-        registerData.usuario.trim(),
-        registerData.password,
-        registerData.email.trim()
-      );
-
-      setMessage({ type: "success", text: response.message || "Registro exitoso" });
-      setRegisterData({ nombre: "", usuario: "", password: "", email: "" });
-      setMode("login");
-    } catch (error) {
-      setMessage({ type: "error", text: error.message });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleInputChange = (event, formType) => {
+  const handleInputChange = (event) => {
     const { name, value } = event.target;
-    if (formType === "login") {
-      setLoginData((prev) => ({ ...prev, [name]: value }));
-    } else {
-      setRegisterData((prev) => ({ ...prev, [name]: value }));
-    }
-  };
-
-  const toggleMode = () => {
-    setMode((prev) => (prev === "login" ? "register" : "login"));
-    setErrors({});
-    setMessage(null);
+    setLoginData((prev) => ({ ...prev, [name]: value }));
   };
 
   const inputClass = (hasError) =>
@@ -128,10 +78,10 @@ export default function Login() {
 
               <div className="space-y-5">
                 <p className="text-sm font-bold uppercase tracking-[0.3em] text-[#69b523]">
-                  {isLogin ? "Bienvenido de nuevo" : "Crea tu acceso"}
+                  Bienvenido de nuevo
                 </p>
                 <h1 className="theme-heading text-5xl font-bold leading-tight tracking-tight text-[#082758]">
-                  {isLogin ? "Entra a tu panel de inventario." : "Empieza a controlar tu inventario."}
+                  Entra a tu panel de inventario.
                 </h1>
                 <p className="theme-muted max-w-xl text-base leading-7 text-slate-600">
                   Gestiona productos, existencias, usuarios y reportes desde una experiencia visual alineada con Data Stock.
@@ -159,14 +109,7 @@ export default function Login() {
                 <div className="mb-7 rounded-[28px] bg-[linear-gradient(135deg,_#082758_0%,_#2f7fd3_68%,_#69b523_100%)] p-6 text-white">
                   <p className="text-sm font-bold uppercase tracking-[0.28em] text-blue-100">Acceso</p>
                   <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                    <h2 className="text-3xl font-bold">{isLogin ? "Iniciar sesion" : "Crear cuenta"}</h2>
-                    <button
-                      type="button"
-                      onClick={toggleMode}
-                      className="theme-card rounded-2xl bg-white px-4 py-2 text-sm font-bold text-[#082758] shadow-lg shadow-[#082758]/10 transition hover:bg-[#eef6ff]"
-                    >
-                      {isLogin ? "Registrarme" : "Ya tengo cuenta"}
-                    </button>
+                    <h2 className="text-3xl font-bold">Iniciar sesion</h2>
                   </div>
                 </div>
 
@@ -183,57 +126,25 @@ export default function Login() {
                 )}
 
                 <form className="space-y-5">
-                  {!isLogin && (
-                    <div className="space-y-2">
-                      <label className="theme-heading text-sm font-bold text-[#082758]">Nombre completo</label>
-                      <input
-                        name="nombre"
-                        value={registerData.nombre}
-                        onChange={(event) => handleInputChange(event, "register")}
-                        type="text"
-                        placeholder="Ej. Juan Perez"
-                        className={`${inputClass(errors.nombre)} theme-input`}
-                      />
-                      {errors.nombre && <p className="text-sm text-rose-500">{errors.nombre}</p>}
-                    </div>
-                  )}
-
                   <div className="space-y-2">
-                    <label className="theme-heading text-sm font-bold text-[#082758]">{isLogin ? "Correo" : "Usuario"}</label>
+                    <label className="theme-heading text-sm font-bold text-[#082758]">Correo</label>
                     <input
-                      name={isLogin ? "email" : "usuario"}
-                      value={isLogin ? loginData.email : registerData.usuario}
-                      onChange={(event) => handleInputChange(event, mode)}
-                      type={isLogin ? "email" : "text"}
-                      placeholder={isLogin ? "tu@correo.com" : "Tu usuario"}
-                      className={`${inputClass(errors[isLogin ? "email" : "usuario"])} theme-input`}
+                      name="email"
+                      value={loginData.email}
+                      onChange={handleInputChange}
+                      type="email"
+                      placeholder="tu@correo.com"
+                      className={`${inputClass(errors.email)} theme-input`}
                     />
-                    {errors[isLogin ? "email" : "usuario"] && (
-                      <p className="text-sm text-rose-500">{errors[isLogin ? "email" : "usuario"]}</p>
-                    )}
+                    {errors.email && <p className="text-sm text-rose-500">{errors.email}</p>}
                   </div>
-
-                  {!isLogin && (
-                    <div className="space-y-2">
-                      <label className="theme-heading text-sm font-bold text-[#082758]">Email</label>
-                      <input
-                        name="email"
-                        value={registerData.email}
-                        onChange={(event) => handleInputChange(event, "register")}
-                        type="email"
-                        placeholder="correo@ejemplo.com"
-                        className={`${inputClass(errors.email)} theme-input`}
-                      />
-                      {errors.email && <p className="text-sm text-rose-500">{errors.email}</p>}
-                    </div>
-                  )}
 
                   <div className="space-y-2">
                     <label className="theme-heading text-sm font-bold text-[#082758]">Contrasena</label>
                     <input
                       name="password"
-                      value={isLogin ? loginData.password : registerData.password}
-                      onChange={(event) => handleInputChange(event, mode)}
+                      value={loginData.password}
+                      onChange={handleInputChange}
                       type="password"
                       placeholder="********"
                       className={`${inputClass(errors.password)} theme-input`}
@@ -243,17 +154,11 @@ export default function Login() {
 
                   <button
                     type="button"
-                    onClick={isLogin ? handleLogin : handleRegister}
+                    onClick={handleLogin}
                     disabled={loading}
                     className="w-full rounded-2xl bg-[#69b523] px-5 py-3 text-base font-bold text-white shadow-xl shadow-[#69b523]/25 transition duration-300 hover:-translate-y-0.5 hover:bg-[#5ca11d] disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {loading
-                      ? isLogin
-                        ? "Validando..."
-                        : "Registrando..."
-                      : isLogin
-                      ? "Ingresar"
-                      : "Crear cuenta"}
+                    {loading ? "Validando..." : "Ingresar"}
                   </button>
                 </form>
               </div>

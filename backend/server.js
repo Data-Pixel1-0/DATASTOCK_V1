@@ -121,12 +121,34 @@ async function resequenceProductos() {
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
-    await connection.query("SET @producto_row_number = 0");
-    await connection.query("UPDATE productos SET id = (@producto_row_number := @producto_row_number + 1) ORDER BY id");
-    const [[{ nextId }]] = await connection.query("SELECT COALESCE(MAX(id), 0) + 1 AS nextId FROM productos");
-    await connection.query(`ALTER TABLE productos AUTO_INCREMENT = ${Number(nextId) || 1}`);
+    const [productos] = await connection.query("SELECT id FROM productos ORDER BY id ASC FOR UPDATE");
+    const mappings = productos
+      .map((producto, index) => ({ oldId: Number(producto.id), newId: index + 1 }))
+      .filter((mapping) => mapping.oldId !== mapping.newId);
+
+    if (mappings.length > 0) {
+      const maxId = Math.max(...productos.map((producto) => Number(producto.id) || 0));
+      const tempOffset = maxId + productos.length + 1000;
+
+      await connection.query("SET FOREIGN_KEY_CHECKS = 0");
+      for (const { oldId } of mappings) {
+        const tempId = oldId + tempOffset;
+        await connection.query("UPDATE productos SET id = ? WHERE id = ?", [tempId, oldId]);
+        await connection.query("UPDATE movimientos SET producto_id = ? WHERE producto_id = ?", [tempId, oldId]);
+      }
+      for (const { oldId, newId } of mappings) {
+        const tempId = oldId + tempOffset;
+        await connection.query("UPDATE productos SET id = ? WHERE id = ?", [newId, tempId]);
+        await connection.query("UPDATE movimientos SET producto_id = ? WHERE producto_id = ?", [newId, tempId]);
+      }
+      await connection.query("SET FOREIGN_KEY_CHECKS = 1");
+    }
+
+    const nextId = productos.length + 1;
+    await connection.query(`ALTER TABLE productos AUTO_INCREMENT = ${nextId}`);
     await connection.commit();
   } catch (error) {
+    await connection.query("SET FOREIGN_KEY_CHECKS = 1");
     await connection.rollback();
     throw error;
   } finally {
@@ -560,55 +582,6 @@ app.post("/api/login", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error en el proceso de inicio de sesion." });
-  }
-});
-
-app.post("/api/signup", async (req, res) => {
-  try {
-    const { nombre, usuario, password, email, rol } = req.body;
-    if (!nombre || !usuario || !password || !email) {
-      return res.status(400).json({ error: "Todos los campos son obligatorios." });
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ error: "El email no es valido." });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({ error: "La contrasena debe tener al menos 6 caracteres." });
-    }
-
-    const columns = await getColumns("usuarios");
-    const emailExpression = usuarioValueExpression(columns, "email", "correo");
-    const passwordColumn = usuarioColumn(columns, "password", "contrasena");
-    const emailColumn = usuarioColumn(columns, "email", "correo");
-
-    const [existingUser] = await db.query(
-      `SELECT id FROM usuarios WHERE usuario = ? OR LOWER(TRIM(${emailExpression})) = LOWER(TRIM(?))`,
-      [usuario, email]
-    );
-
-    if (existingUser.length > 0) {
-      return res.status(409).json({ error: "El usuario o email ya esta registrado." });
-    }
-
-    const insertColumns = ["nombre", "usuario", passwordColumn, emailColumn];
-    const insertValues = [nombre.trim(), usuario.trim(), password, email.trim()];
-
-    if (columns.has("rol")) {
-      insertColumns.push("rol");
-      insertValues.push(["administrador", "empleado", "consulta"].includes(rol) ? rol : "empleado");
-    }
-
-    const placeholders = insertColumns.map(() => "?").join(", ");
-    const escapedColumns = insertColumns.map((column) => `\`${column}\``).join(", ");
-    const [result] = await db.query(`INSERT INTO usuarios (${escapedColumns}) VALUES (${placeholders})`, insertValues);
-
-    res.status(201).json({ success: true, message: "Usuario registrado exitosamente.", userId: result.insertId });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message || "Error en el proceso de registro." });
   }
 });
 

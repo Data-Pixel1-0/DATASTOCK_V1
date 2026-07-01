@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
+import { useLanguage } from "../context/useLanguage.js";
 import { useTheme } from "../context/useTheme.js";
+import { languageOptions } from "../i18n/languages.js";
 import { changePassword } from "../services/api.js";
 
 const defaultPreferences = {
@@ -37,6 +39,7 @@ function getInitials(name = "DS") {
 function Configuracion() {
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
+  const { language, setLanguage, currentLanguage } = useLanguage();
   const [showProfile, setShowProfile] = useState(true);
   const [savedMessage, setSavedMessage] = useState("");
   const [passwordMessage, setPasswordMessage] = useState(null);
@@ -88,6 +91,12 @@ function Configuracion() {
     setSavedMessage("Preferencias guardadas correctamente.");
   };
 
+  const handleLanguageChange = (event) => {
+    const nextLanguage = languageOptions.find((item) => item.code === event.target.value);
+    setLanguage(event.target.value);
+    setSavedMessage(`Idioma cambiado a ${nextLanguage?.name || "seleccionado"}.`);
+  };
+
   const handlePasswordChange = (event) => {
     const { name, value } = event.target;
     setPasswordData((current) => ({ ...current, [name]: value }));
@@ -128,6 +137,7 @@ function Configuracion() {
     { label: "Vista inicial", value: preferenceLabels[preferences.defaultView] },
     { label: "Alerta de stock", value: `${preferences.stockAlert} unidades` },
     { label: "Moneda", value: preferenceLabels[preferences.currency] },
+    { label: "Idioma", value: currentLanguage.name },
   ];
 
   return (
@@ -197,7 +207,7 @@ function Configuracion() {
           <p className="theme-muted mt-3 text-sm leading-6 text-slate-600">
             Puedes volver a la pantalla inicial con el boton de cerrar sesion cuando termines tu trabajo.
           </p>
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {preferenceSummary.map((item) => (
               <div key={item.label} className="theme-soft rounded-2xl border border-[#bfe5a4] bg-white/70 p-4">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#2f7d1f]">{item.label}</p>
@@ -225,6 +235,25 @@ function Configuracion() {
         </div>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
+          <label className="block">
+            <span className="theme-heading text-sm font-bold text-[#082758]">Idioma del sistema</span>
+            <select
+              name="language"
+              value={language}
+              onChange={handleLanguageChange}
+              className="notranslate theme-input mt-2 w-full rounded-2xl border border-[#d8e8f7] bg-white px-4 py-3 text-sm font-semibold text-[#082758] outline-none transition focus:border-[#2f7fd3] focus:ring-4 focus:ring-[#2f7fd3]/10"
+            >
+              {languageOptions.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <span className="theme-muted mt-2 block text-xs leading-5 text-slate-500">
+              El cambio se guarda y traduce todo el panel automaticamente.
+            </span>
+          </label>
+
           <label className="block">
             <span className="theme-heading text-sm font-bold text-[#082758]">Vista inicial</span>
             <select
