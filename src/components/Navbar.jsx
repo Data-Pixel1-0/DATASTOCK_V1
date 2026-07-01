@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import ThemeToggleButton from "./ThemeToggleButton.jsx";
 import { useSessionUser } from "../hooks/useSessionUser.js";
 import { canAccess } from "../utils/auth.js";
 
@@ -25,6 +26,7 @@ function Navbar() {
           <div className="theme-soft hidden rounded-full border border-[#d8e8f7] bg-white px-4 py-2 text-sm font-semibold text-[#082758] shadow-sm sm:block">
             {user?.rol ? `Rol: ${user.rol}` : "Inventario activo"}
           </div>
+          <ThemeToggleButton />
           <div className="rounded-full bg-[#69b523] px-4 py-2 text-sm font-bold text-white shadow-lg shadow-[#69b523]/25">
             En linea
           </div>

@@ -1,8 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import logo from "../assets/logo.png";
 import { useLanguage } from "../context/useLanguage.js";
-import { useTheme } from "../context/useTheme.js";
 import { languageOptions } from "../i18n/languages.js";
 import { changePassword } from "../services/api.js";
 
@@ -38,7 +36,6 @@ function getInitials(name = "DS") {
 
 function Configuracion() {
   const navigate = useNavigate();
-  const { isDark, toggleTheme } = useTheme();
   const { language, setLanguage, currentLanguage } = useLanguage();
   const [showProfile, setShowProfile] = useState(true);
   const [savedMessage, setSavedMessage] = useState("");
@@ -407,32 +404,6 @@ function Configuracion() {
         </div>
       </section>
 
-      <section className="theme-card rounded-[32px] border border-[#d8e8f7] bg-white p-6 shadow-xl shadow-[#082758]/8">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="theme-soft rounded-[24px] border border-[#d8e8f7] bg-white p-3">
-              <img src={logo} alt="Data Stock" className="h-16 w-32 object-contain" />
-            </div>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#2f7fd3]">Apariencia</p>
-              <h2 className="theme-heading mt-2 text-xl font-bold text-[#082758]">
-                Modo {isDark ? "oscuro" : "claro"}
-              </h2>
-              <p className="theme-muted mt-2 text-sm leading-6 text-slate-500">
-                Cambia los colores del sistema, login, registro y pantalla inicial usando la paleta del logo.
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="rounded-2xl bg-[#69b523] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-[#69b523]/25 transition hover:-translate-y-0.5 hover:bg-[#5ca11d]"
-          >
-            Cambiar a modo {isDark ? "claro" : "oscuro"}
-          </button>
-        </div>
-      </section>
     </div>
   );
 }
