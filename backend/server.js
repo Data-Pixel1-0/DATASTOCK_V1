@@ -1,5 +1,7 @@
 const express = require("express");
 const cors = require("cors");
+const net = require("net");
+const tls = require("tls");
 const db = require("./config/db");
 
 const app = express();
@@ -197,6 +199,197 @@ function productStatus(producto) {
   return "Disponible";
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function normalizeEmailAddress(value) {
+  return String(value || "").trim();
+}
+
+function buildAlertEmail({ user, alertas }) {
+  const rows = alertas
+    .map(
+      (alerta) => `
+        <tr>
+          <td style="padding:12px;border-bottom:1px solid #d8e8f7;color:#082758;font-weight:700;">${escapeHtml(alerta.mensaje)}</td>
+          <td style="padding:12px;border-bottom:1px solid #d8e8f7;color:${alerta.severidad === "danger" ? "#be123c" : "#b45309"};font-weight:700;">${alerta.severidad === "danger" ? "Critica" : "Advertencia"}</td>
+        </tr>`
+    )
+    .join("");
+
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;background:#f7fbff;padding:28px;color:#082758;">
+      <div style="max-width:720px;margin:0 auto;background:#ffffff;border:1px solid #d8e8f7;border-radius:18px;overflow:hidden;">
+        <div style="background:#082758;padding:24px;color:#ffffff;">
+          <div style="font-size:20px;font-weight:800;letter-spacing:4px;text-transform:uppercase;">Data Stock</div>
+          <div style="margin-top:8px;color:#dbeafe;">Alertas de inventario</div>
+        </div>
+        <div style="padding:24px;">
+          <h1 style="margin:0 0 10px;font-size:24px;color:#082758;">Hola ${escapeHtml(user.nombre || user.usuario || "equipo")}</h1>
+          <p style="margin:0 0 20px;color:#475569;line-height:1.6;">Estos productos requieren revision para compras o reposicion.</p>
+          <table style="width:100%;border-collapse:collapse;border:1px solid #d8e8f7;border-radius:12px;overflow:hidden;">
+            <thead>
+              <tr>
+                <th style="padding:12px;background:#eef6ff;color:#082758;text-align:left;">Alerta</th>
+                <th style="padding:12px;background:#eef6ff;color:#082758;text-align:left;">Nivel</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <p style="margin:22px 0 0;color:#64748b;font-size:13px;">Correo generado automaticamente por Data Stock.</p>
+        </div>
+      </div>
+    </div>`;
+
+  const text = [
+    `Data Stock - Alertas de inventario`,
+    `Usuario: ${user.nombre || user.usuario || "equipo"}`,
+    "",
+    ...alertas.map((alerta) => `- ${alerta.mensaje} (${alerta.severidad === "danger" ? "Critica" : "Advertencia"})`),
+  ].join("\n");
+
+  return { html, text };
+}
+
+function getSmtpConfig() {
+  return {
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 587),
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    secure: String(process.env.SMTP_SECURE || "").toLowerCase() === "true",
+  };
+}
+
+function smtpEncodeData(message) {
+  return message.replace(/\r?\n/g, "\r\n").replace(/^\./gm, "..");
+}
+
+function createSmtpClient(config) {
+  let socket;
+  let buffer = "";
+
+  const connect = () =>
+    new Promise((resolve, reject) => {
+      const options = { host: config.host, port: config.port };
+      socket = config.secure ? tls.connect(options, resolve) : net.connect(options, resolve);
+      socket.setEncoding("utf8");
+      socket.on("data", (chunk) => {
+        buffer += chunk;
+      });
+      socket.on("error", reject);
+    });
+
+  const read = () =>
+    new Promise((resolve, reject) => {
+      const startedAt = Date.now();
+      const timer = setInterval(() => {
+        const lines = buffer.split(/\r?\n/).filter(Boolean);
+        const lastLine = lines[lines.length - 1] || "";
+        if (/^\d{3}\s/.test(lastLine)) {
+          const response = buffer;
+          buffer = "";
+          clearInterval(timer);
+          resolve(response);
+        } else if (Date.now() - startedAt > 12000) {
+          clearInterval(timer);
+          reject(new Error("Tiempo de espera agotado con el servidor SMTP."));
+        }
+      }, 25);
+    });
+
+  const command = async (line, expectedCodes = ["250"]) => {
+    socket.write(`${line}\r\n`);
+    const response = await read();
+    if (!expectedCodes.some((code) => response.startsWith(code))) {
+      throw new Error(`SMTP rechazo el comando ${line.split(" ")[0]}: ${response.trim()}`);
+    }
+    return response;
+  };
+
+  const startTls = async () => {
+    await command("STARTTLS", ["220"]);
+    socket = tls.connect({ socket, servername: config.host });
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk) => {
+      buffer += chunk;
+    });
+  };
+
+  const end = () => {
+    if (socket) socket.end();
+  };
+
+  return { connect, read, command, startTls, end };
+}
+
+async function sendMail({ to, subject, text, html }) {
+  const config = getSmtpConfig();
+  if (!config.host || !config.from) {
+    throw new Error("Configura SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS y SMTP_FROM en backend/.env.");
+  }
+
+  const recipient = normalizeEmailAddress(to);
+  const sender = normalizeEmailAddress(config.from);
+  if (!recipient || !recipient.includes("@")) {
+    throw new Error("El usuario no tiene un correo valido registrado.");
+  }
+
+  const client = createSmtpClient(config);
+  const boundary = `datastock-${Date.now()}`;
+  const message = [
+    `From: Data Stock <${sender}>`,
+    `To: ${recipient}`,
+    `Subject: ${subject}`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    text,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/html; charset=utf-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    html,
+    "",
+    `--${boundary}--`,
+    "",
+  ].join("\r\n");
+
+  try {
+    await client.connect();
+    await client.read();
+    await client.command(`EHLO ${process.env.SMTP_HELO || "datastock.local"}`);
+    if (!config.secure && process.env.SMTP_STARTTLS !== "false") {
+      await client.startTls();
+      await client.command(`EHLO ${process.env.SMTP_HELO || "datastock.local"}`);
+    }
+    if (config.user && config.pass) {
+      await client.command("AUTH LOGIN", ["334"]);
+      await client.command(Buffer.from(config.user).toString("base64"), ["334"]);
+      await client.command(Buffer.from(config.pass).toString("base64"), ["235"]);
+    }
+    await client.command(`MAIL FROM:<${sender}>`);
+    await client.command(`RCPT TO:<${recipient}>`, ["250", "251"]);
+    await client.command("DATA", ["354"]);
+    await client.command(`${smtpEncodeData(message)}\r\n.`, ["250"]);
+    await client.command("QUIT", ["221"]);
+  } finally {
+    client.end();
+  }
+}
+
 async function getDashboardData() {
   const [productos] = await db.query("SELECT * FROM productos ORDER BY id ASC");
   const [movimientos] = await db.query(`
@@ -290,6 +483,47 @@ app.get("/api/dashboard", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "No se pudo cargar el dashboard." });
+  }
+});
+
+app.post("/api/alertas/email", async (req, res) => {
+  try {
+    const usuarioId = parseInt(req.body.usuario_id, 10);
+    if (!usuarioId) {
+      return res.status(400).json({ error: "Usuario requerido para enviar alertas." });
+    }
+
+    const columns = await getColumns("usuarios");
+    const emailExpression = usuarioValueExpression(columns, "email", "correo");
+    const [users] = await db.query(
+      `SELECT id, nombre, usuario, ${emailExpression} AS email
+       FROM usuarios
+       WHERE id = ?
+       LIMIT 1`,
+      [usuarioId]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: "Usuario no encontrado." });
+    }
+
+    const dashboard = await getDashboardData();
+    const alertas = dashboard.alertas || [];
+    if (alertas.length === 0) {
+      return res.json({ success: true, message: "No hay alertas para enviar." });
+    }
+
+    const email = buildAlertEmail({ user: users[0], alertas });
+    await sendMail({
+      to: users[0].email,
+      subject: `Data Stock - ${alertas.length} alerta${alertas.length === 1 ? "" : "s"} de inventario`,
+      ...email,
+    });
+
+    res.json({ success: true, message: "Alertas enviadas al correo registrado." });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message || "No se pudieron enviar las alertas por correo." });
   }
 });
 

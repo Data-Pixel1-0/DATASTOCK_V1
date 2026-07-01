@@ -30,6 +30,13 @@ export async function getDashboard() {
   return request("/api/dashboard");
 }
 
+export async function sendAlertEmail(usuarioId) {
+  return request("/api/alertas/email", {
+    method: "POST",
+    body: JSON.stringify({ usuario_id: usuarioId }),
+  });
+}
+
 export async function getProductoDetalle(productoId) {
   return request(`/api/productos/${productoId}`);
 }

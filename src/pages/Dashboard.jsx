@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { getDashboard } from "../services/api.js";
+import { getCurrentUser } from "../utils/auth.js";
+import { getDashboard, sendAlertEmail } from "../services/api.js";
 
 const currencyFormatter = new Intl.NumberFormat("es-CO", {
   style: "currency",
@@ -36,6 +37,38 @@ function Dashboard() {
 
     loadDashboard();
   }, []);
+
+  useEffect(() => {
+    if (loading || !dashboard?.alertas?.length) return;
+
+    let preferences = { emailNotifications: true };
+    try {
+      preferences = {
+        ...preferences,
+        ...(JSON.parse(localStorage.getItem("datastock-preferences")) || {}),
+      };
+    } catch {
+      preferences = { emailNotifications: true };
+    }
+
+    if (!preferences.emailNotifications) return;
+
+    const user = getCurrentUser();
+    if (!user?.id || !user?.email) return;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const alertSignature = dashboard.alertas.map((alerta) => `${alerta.tipo}-${alerta.producto_id}`).join("|");
+    const storageKey = `datastock-alert-email-${user.id}-${today}`;
+    if (localStorage.getItem(storageKey) === alertSignature) return;
+
+    sendAlertEmail(user.id)
+      .then(() => {
+        localStorage.setItem(storageKey, alertSignature);
+      })
+      .catch((err) => {
+        console.warn("No se pudo enviar el correo de alertas:", err.message);
+      });
+  }, [dashboard, loading]);
 
   const stats = dashboard?.stats || {};
   const charts = dashboard?.charts || {};

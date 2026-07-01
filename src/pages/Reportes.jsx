@@ -1,11 +1,35 @@
 import { useEffect, useMemo, useState } from "react";
 import { getMovimientos, getProductos } from "../services/api.js";
 
+const companyName = "Data Stock";
+
 const reportTypes = {
   general: "Reporte general de inventario",
   agotados: "Productos agotados",
   movimientos: "Historial de movimientos",
 };
+
+const columnLabels = {
+  id: "ID",
+  nombre: "Nombre",
+  codigo: "Codigo",
+  categoria: "Categoria",
+  precio: "Precio",
+  stock: "Stock",
+  stock_minimo: "Stock minimo",
+  estado: "Estado",
+  producto: "Producto",
+  tipo: "Tipo",
+  cantidad: "Cantidad",
+  fecha: "Fecha",
+  usuario: "Usuario",
+};
+
+const currencyFormatter = new Intl.NumberFormat("es-CO", {
+  style: "currency",
+  currency: "COP",
+  maximumFractionDigits: 0,
+});
 
 function downloadFile(filename, content, type) {
   const blob = new Blob([content], { type });
@@ -17,11 +41,129 @@ function downloadFile(filename, content, type) {
   URL.revokeObjectURL(url);
 }
 
-function toCsv(rows) {
-  if (!rows.length) return "";
-  const headers = Object.keys(rows[0]);
-  const escape = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
-  return [headers.join(","), ...rows.map((row) => headers.map((header) => escape(row[header])).join(","))].join("\n");
+function formatDateTime(value) {
+  return new Date(value).toLocaleString("es-CO", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function formatCell(column, value) {
+  if (value === null || value === undefined || value === "") return "-";
+  if (column === "precio") return currencyFormatter.format(Number(value) || 0);
+  if (column === "tipo") return String(value).charAt(0).toUpperCase() + String(value).slice(1);
+  return value;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function getColumns(rows) {
+  return rows.length ? Object.keys(rows[0]) : [];
+}
+
+function buildReportHtml({ rows, reportType, totals, forExcel = false }) {
+  const columns = getColumns(rows);
+  const generatedAt = formatDateTime(new Date());
+  const title = reportTypes[reportType];
+  const totalsRows = [
+    ["Productos", totals.productos],
+    ["Agotados", totals.agotados],
+    ["Movimientos", totals.movimientos],
+    ["Valor inventario", currencyFormatter.format(totals.valor)],
+  ];
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body { margin: 0; color: #082758; font-family: Arial, Helvetica, sans-serif; background: #ffffff; }
+    .page { padding: ${forExcel ? "18px" : "34px"}; }
+    .header { border-bottom: 4px solid #69b523; padding-bottom: 18px; display: flex; justify-content: space-between; gap: 24px; }
+    .brand { color: #082758; font-size: 24px; font-weight: 800; letter-spacing: 4px; text-transform: uppercase; }
+    .subtitle { margin-top: 8px; color: #64748b; font-size: 13px; }
+    .title { margin: 26px 0 8px; font-size: 28px; font-weight: 800; }
+    .meta { color: #475569; font-size: 13px; }
+    .summary { margin: 22px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .metric { border: 1px solid #d8e8f7; border-radius: 12px; padding: 12px; background: #f8fbff; }
+    .metric-label { color: #64748b; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+    .metric-value { margin-top: 6px; font-size: 18px; font-weight: 800; color: #082758; }
+    table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 12px; }
+    th { background: #082758; color: #ffffff; padding: 10px; text-align: left; border: 1px solid #082758; }
+    td { padding: 9px 10px; border: 1px solid #d8e8f7; color: #334155; }
+    tr:nth-child(even) td { background: #f8fbff; }
+    .empty { margin-top: 24px; border: 1px solid #d8e8f7; border-radius: 12px; padding: 18px; color: #64748b; }
+    .footer { margin-top: 24px; color: #64748b; font-size: 11px; border-top: 1px solid #d8e8f7; padding-top: 12px; }
+    @media print {
+      @page { size: landscape; margin: 12mm; }
+      .page { padding: 0; }
+      .summary { grid-template-columns: repeat(4, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <div>
+        <div class="brand">${companyName}</div>
+        <div class="subtitle">Tu inventario, bajo control.</div>
+      </div>
+      <div class="meta">
+        <strong>Generado:</strong> ${escapeHtml(generatedAt)}<br />
+        <strong>Formato:</strong> ${forExcel ? "Excel" : "PDF"}
+      </div>
+    </div>
+    <h1 class="title">${escapeHtml(title)}</h1>
+    <div class="meta">Reporte consolidado de inventario y actividad operativa.</div>
+    <div class="summary">
+      ${totalsRows
+        .map(
+          ([label, value]) => `<div class="metric"><div class="metric-label">${escapeHtml(label)}</div><div class="metric-value">${escapeHtml(value)}</div></div>`
+        )
+        .join("")}
+    </div>
+    ${
+      rows.length
+        ? `<table>
+            <thead><tr>${columns.map((column) => `<th>${escapeHtml(columnLabels[column] || column)}</th>`).join("")}</tr></thead>
+            <tbody>
+              ${rows
+                .map(
+                  (row) =>
+                    `<tr>${columns
+                      .map((column) => `<td>${escapeHtml(formatCell(column, row[column]))}</td>`)
+                      .join("")}</tr>`
+                )
+                .join("")}
+            </tbody>
+          </table>`
+        : `<div class="empty">No hay datos para este reporte.</div>`
+    }
+    <div class="footer">Documento generado automaticamente por Data Stock.</div>
+  </div>
+</body>
+</html>`;
+}
+
+function openPrintReport(reportHtml) {
+  const printWindow = window.open("", "_blank", "width=1200,height=800");
+  if (!printWindow) return false;
+  printWindow.document.open();
+  printWindow.document.write(reportHtml);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+  }, 300);
+  return true;
 }
 
 function Reportes() {
@@ -67,7 +209,7 @@ function Reportes() {
         producto: movimiento.producto,
         tipo: movimiento.tipo,
         cantidad: movimiento.cantidad,
-        fecha: new Date(movimiento.fecha).toLocaleString(),
+        fecha: formatDateTime(movimiento.fecha),
         usuario: movimiento.usuario || "",
       }));
     }
@@ -95,11 +237,16 @@ function Reportes() {
   }, [movimientos, productos]);
 
   const handleExportCsv = () => {
-    downloadFile(`${reportType}-datastock.csv`, toCsv(rows), "text/csv;charset=utf-8");
+    const html = buildReportHtml({ rows, reportType, totals, forExcel: true });
+    downloadFile(`${reportType}-datastock.xls`, html, "application/vnd.ms-excel;charset=utf-8");
   };
 
   const handlePrint = () => {
-    window.print();
+    const html = buildReportHtml({ rows, reportType, totals });
+    const opened = openPrintReport(html);
+    if (!opened) {
+      setMessage({ type: "error", text: "Permite ventanas emergentes para generar el PDF." });
+    }
   };
 
   return (
@@ -171,7 +318,7 @@ function Reportes() {
               <thead className="bg-[#eef6ff] text-[#082758]">
                 <tr>
                   {Object.keys(rows[0]).map((column) => (
-                    <th key={column} className="px-4 py-3 text-sm font-bold capitalize">{column.replace("_", " ")}</th>
+                    <th key={column} className="px-4 py-3 text-sm font-bold">{columnLabels[column] || column}</th>
                   ))}
                 </tr>
               </thead>
@@ -179,7 +326,7 @@ function Reportes() {
                 {rows.map((row, index) => (
                   <tr key={index} className="border-t border-[#d8e8f7] even:bg-[#f8fbff]">
                     {Object.values(row).map((value, cellIndex) => (
-                      <td key={cellIndex} className="px-4 py-3 text-sm text-slate-600">{value || "-"}</td>
+                      <td key={cellIndex} className="px-4 py-3 text-sm text-slate-600">{formatCell(Object.keys(row)[cellIndex], value)}</td>
                     ))}
                   </tr>
                 ))}

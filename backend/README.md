@@ -18,6 +18,14 @@ DB_USER=root
 DB_PASSWORD=tu_contraseña
 DB_NAME=datapixel
 PORT=3000
+
+# Correo para alertas
+SMTP_HOST=smtp.tudominio.com
+SMTP_PORT=587
+SMTP_USER=alertas@tudominio.com
+SMTP_PASS=tu_clave_smtp
+SMTP_FROM=alertas@tudominio.com
+SMTP_SECURE=false
 ```
 
 ### 3. Instalar Dependencias
