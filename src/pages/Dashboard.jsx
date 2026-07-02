@@ -151,34 +151,31 @@ function Dashboard() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <article className="theme-card rounded-[32px] border border-[#d8e8f7] bg-white p-6 shadow-xl shadow-[#082758]/8">
+        <article className="theme-card rounded-[32px] p-6 shadow-xl shadow-[#082758]/8">
           <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#69b523]">Centro de notificaciones</p>
-          <h2 className="theme-heading mt-2 text-2xl font-bold text-[#082758]">Alertas de inventario</h2>
+          <h2 className="theme-heading mt-2 text-2xl font-bold">Alertas de inventario</h2>
           <div className="mt-5 space-y-3">
             {loading ? (
-              <p className="rounded-2xl bg-[#eef6ff] p-4 text-[#082758]">Cargando alertas...</p>
+              <p className="rounded-2xl theme-soft p-4">Cargando alertas...</p>
             ) : alertas.length === 0 ? (
-              <p className="rounded-2xl border border-[#bfe5a4] bg-[#f1f9eb] p-4 font-semibold text-[#2f7d1f]">
+              <p className="rounded-2xl theme-soft p-4 font-semibold">
                 No hay alertas criticas en este momento.
               </p>
             ) : (
               alertas.map((alerta) => (
-                <div
-                  key={`${alerta.tipo}-${alerta.producto_id}`}
-                  className={`rounded-2xl border p-4 ${alerta.severidad === "danger" ? "border-rose-200 bg-rose-50 text-rose-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}
-                >
-                  <p className="font-bold">{alerta.mensaje}</p>
-                  <p className="mt-1 text-sm opacity-80">Revision recomendada para compras o reposicion.</p>
+                <div key={`${alerta.tipo}-${alerta.producto_id}`} className={`rounded-2xl p-4 theme-soft`}>
+                  <p className="font-bold theme-heading">{alerta.mensaje}</p>
+                  <p className="mt-1 text-sm theme-muted">Revision recomendada para compras o reposicion.</p>
                 </div>
               ))
             )}
           </div>
         </article>
 
-        <article className="theme-card overflow-hidden rounded-[32px] border border-[#d8e8f7] bg-white shadow-xl shadow-[#082758]/8">
-          <div className="border-b border-[#d8e8f7] p-6">
+        <article className="theme-card overflow-hidden rounded-[32px] shadow-xl shadow-[#082758]/8">
+          <div className="border-b p-6">
             <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#2f7fd3]">Actividad</p>
-            <h2 className="theme-heading mt-2 text-2xl font-bold text-[#082758]">Movimientos recientes</h2>
+            <h2 className="theme-heading mt-2 text-2xl font-bold">Movimientos recientes</h2>
           </div>
           {loading ? (
             <p className="p-6 text-[#082758]">Cargando movimientos...</p>
